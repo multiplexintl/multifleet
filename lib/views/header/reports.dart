@@ -1265,7 +1265,7 @@ class _ReportsPageState extends State<ReportsPage> {
                     const SizedBox(width: 16),
                     _buildLegendItem('Repairs', Colors.red[400]!),
                     const SizedBox(width: 16),
-                    _buildLegendItem('Tires', Colors.green[400]!),
+                    _buildLegendItem('Tyres', Colors.green[400]!),
                     const SizedBox(width: 16),
                     _buildLegendItem('Parts', Colors.purple[400]!),
                     const SizedBox(width: 16),

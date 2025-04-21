@@ -1,21 +1,25 @@
-import 'dart:convert';
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:multifleet/models/company.dart';
 import 'package:multifleet/models/vehicle.dart';
 import 'package:multifleet/repo/vehicles_repo.dart';
+import 'package:multifleet/services/company_service.dart';
 
-import '../models/tire.dart';
+import '../models/tyre.dart';
 import '../models/vehicle_docs.dart';
 
-class VehicleListingController extends GetxController {
+class VehicleListingController extends GetxController
+    implements CompanyAwareController {
   final RxList<Vehicle> originalVehicles = <Vehicle>[].obs;
   final RxList<Vehicle> filteredVehicles = <Vehicle>[].obs;
+
   final RxBool _isSearchVisible = true.obs;
   bool get isSearchVisible => _isSearchVisible.value;
   // Search controller
   final TextEditingController searchController = TextEditingController();
+  final companyService = Get.find<CompanyService>();
 
   // Filter options
   final RxString selectedVehicleType = 'All'.obs;
@@ -27,25 +31,30 @@ class VehicleListingController extends GetxController {
   @override
   void onInit() async {
     super.onInit();
-    // Initialize vehicles
-    await getComprehensiveVehicleData();
+    // Register this controller with the company service
+    companyService.registerController(this);
+    // Initial data load happens when company service calls onCompanyChanged
+    // or can be explicitly triggered if needed
+    if (companyService.selectedCompany != null) {
+      await getComprehensiveVehicleData();
+    }
   }
 
-  Future<void> getVehicles() async {
-    isLoading.value = true;
-    try {
-      var result = await VehiclesRepo().getAllVehicles(company: 'EPIC01');
-      result.fold((error) {
-        log(error);
-      }, (vehicles) {
-        originalVehicles.value = vehicles;
-        filteredVehicles.value = List.from(originalVehicles);
-      });
-    } on Exception catch (e) {
-      log(e.toString());
-    } finally {
-      isLoading.value = false;
-    }
+  @override
+  void onClose() {
+    // Unregister this controller when it's closed
+    companyService.unregisterController(this);
+    searchController.dispose();
+    super.onClose();
+  }
+
+  @override
+  void onCompanyChanged(Company newCompany) {
+    originalVehicles.clear();
+    filteredVehicles.clear();
+
+    // Reload data with the new company
+    getComprehensiveVehicleData();
   }
 
   // New function to get comprehensive vehicle data
@@ -67,16 +76,34 @@ class VehicleListingController extends GetxController {
         // Fetch documents for each vehicle
         await fetchAndAttachDocuments(vehicleMap);
 
-        // Fetch tires for each vehicle
-        await fetchAndAttachTires(vehicleMap);
+        // Fetch tyres for each vehicle
+        await fetchAndAttachTyres(vehicleMap);
 
         // Update the original and filtered lists with the enhanced vehicles
         originalVehicles.value = vehicleMap.values.toList();
         filteredVehicles.value = List.from(originalVehicles);
-        log(json.encode(filteredVehicles));
+        // log(json.encode(filteredVehicles));
       }
     } on Exception catch (e) {
       log('Error getting comprehensive vehicle data: ${e.toString()}');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<void> getVehicles() async {
+    isLoading.value = true;
+    try {
+      var result = await VehiclesRepo().getAllVehicles(
+          company: '${companyService.selectedCompanyObs.value?.id}');
+      result.fold((error) {
+        log(error);
+      }, (vehicles) {
+        originalVehicles.value = vehicles;
+        filteredVehicles.value = List.from(originalVehicles);
+      });
+    } on Exception catch (e) {
+      log(e.toString());
     } finally {
       isLoading.value = false;
     }
@@ -86,8 +113,8 @@ class VehicleListingController extends GetxController {
   Future<void> fetchAndAttachDocuments(Map<String?, Vehicle> vehicleMap) async {
     try {
       // Assuming you have a repository method to get documents for all vehicles or by company
-      var result =
-          await VehiclesRepo().getAllVehicleDocument(company: 'EPIC01');
+      var result = await VehiclesRepo().getVehicleDocument(
+          company: '${companyService.selectedCompanyObs.value?.id}');
 
       result.fold((error) {
         log('Error fetching vehicle documents: $error');
@@ -114,36 +141,37 @@ class VehicleListingController extends GetxController {
     }
   }
 
-  // Helper function to fetch and attach tires
-  Future<void> fetchAndAttachTires(Map<String?, Vehicle> vehicleMap) async {
+  // Helper function to fetch and attach tyres
+  Future<void> fetchAndAttachTyres(Map<String?, Vehicle> vehicleMap) async {
+    log("vehicleMap");
     try {
-      // Assuming you have a repository method to get tires for all vehicles or by company
-      var result =
-          await VehiclesRepo().getAllVehicleTires(vehicleNumber: 'EPIC01');
+      // Assuming you have a repository method to get tyres for all vehicles or by company
+      var result = await VehiclesRepo().getAllVehicleTyres(
+          vehicleNumber: vehicleMap.values.first.vehicleNo!);
 
       result.fold((error) {
-        log('Error fetching vehicle tires: $error');
-      }, (tires) {
-        // Group tires by vehicleNo
-        Map<String?, List<Tire>> tiresByVehicle = {};
+        log('Error fetching vehicle tyres: $error');
+      }, (tyres) {
+        // Group tyres by vehicleNo
+        Map<String?, List<Tyre>> tyresByVehicle = {};
 
-        for (var tire in tires) {
-          if (tire.vehicleNo != null) {
-            tiresByVehicle.putIfAbsent(tire.vehicleNo, () => []);
-            tiresByVehicle[tire.vehicleNo]!.add(tire);
+        for (var tyre in tyres) {
+          if (tyre.vehicleNo != null) {
+            tyresByVehicle.putIfAbsent(tyre.vehicleNo, () => []);
+            tyresByVehicle[tyre.vehicleNo]!.add(tyre);
           }
         }
 
-        // Attach tires to corresponding vehicles
-        tiresByVehicle.forEach((vehicleNo, vehicleTires) {
+        // Attach tyres to corresponding vehicles
+        tyresByVehicle.forEach((vehicleNo, vehicleTyres) {
           if (vehicleMap.containsKey(vehicleNo)) {
             vehicleMap[vehicleNo] =
-                vehicleMap[vehicleNo]!.withTires(vehicleTires);
+                vehicleMap[vehicleNo]!.withTyres(vehicleTyres);
           }
         });
       });
     } catch (e) {
-      log('Exception in fetchAndAttachTires: ${e.toString()}');
+      log('Exception in fetchAndAttachTyres: ${e.toString()}');
     }
   }
 
@@ -288,5 +316,39 @@ class VehicleListingController extends GetxController {
     }
 
     return types;
+  }
+
+  Future<Vehicle?> getVehicleByNo(String vehicleNo) async {
+    Vehicle? vehicle;
+
+    // Check if the vehicles data is already loaded
+    if (originalVehicles.isNotEmpty) {
+      // Try to find the vehicle by its number
+      try {
+        vehicle = originalVehicles.firstWhere(
+          (element) => element.vehicleNo == vehicleNo,
+        );
+      } catch (e) {
+        // Vehicle not found in the list
+        vehicle = null;
+      }
+    } else {
+      // If no vehicles are loaded, get the comprehensive data first
+      await getComprehensiveVehicleData();
+
+      // Now try to find the vehicle after data is loaded
+      if (originalVehicles.isNotEmpty) {
+        try {
+          vehicle = originalVehicles.firstWhere(
+            (element) => element.vehicleNo == vehicleNo,
+          );
+        } catch (e) {
+          // Vehicle not found after loading data
+          vehicle = null;
+        }
+      }
+    }
+
+    return vehicle;
   }
 }

@@ -1542,9 +1542,9 @@ class VehicleExpiryPage extends StatelessWidget {
 
   Widget _buildServiceComparison(ExpiryDetailsController controller) {
     // Since there's no direct service document in the Vehicle class,
-    // we'll use the tire info as a substitute for service details
-    final tire = controller.selectedVehicle.value?.tires?.isNotEmpty == true
-        ? controller.selectedVehicle.value!.tires![0]
+    // we'll use the tyre info as a substitute for service details
+    final tyre = controller.selectedVehicle.value?.tyres?.isNotEmpty == true
+        ? controller.selectedVehicle.value!.tyres![0]
         : null;
 
     return Card(
@@ -1616,8 +1616,8 @@ class VehicleExpiryPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 12),
                             _buildComparisonItem(
-                              'Tire Brand',
-                              tire?.brand ?? 'N/A',
+                              'Tyre Brand',
+                              tyre?.brand ?? 'N/A',
                               null,
                             ),
                           ],
@@ -1652,8 +1652,8 @@ class VehicleExpiryPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       _buildComparisonItem(
-                        'Tire Brand',
-                        tire?.brand ?? 'N/A',
+                        'Tyre Brand',
+                        tyre?.brand ?? 'N/A',
                         null,
                       ),
                     ],
@@ -1662,13 +1662,13 @@ class VehicleExpiryPage extends StatelessWidget {
               },
             ),
 
-            // Additional tire information if available
-            if (tire != null) ...[
+            // Additional tyre information if available
+            if (tyre != null) ...[
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 16),
               const Text(
-                'Tire Information',
+                'Tyre Information',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -1678,7 +1678,7 @@ class VehicleExpiryPage extends StatelessWidget {
               LayoutBuilder(
                 builder: (context, constraints) {
                   if (constraints.maxWidth > 600) {
-                    // Two-column layout for tire details
+                    // Two-column layout for tyre details
                     return Row(
                       children: [
                         Expanded(
@@ -1687,13 +1687,13 @@ class VehicleExpiryPage extends StatelessWidget {
                             children: [
                               _buildComparisonItem(
                                 'Position',
-                                tire.position ?? 'N/A',
+                                tyre.position ?? 'N/A',
                                 null,
                               ),
                               const SizedBox(height: 12),
                               _buildComparisonItem(
                                 'Size',
-                                tire.size ?? 'N/A',
+                                tyre.size ?? 'N/A',
                                 null,
                               ),
                             ],
@@ -1710,15 +1710,15 @@ class VehicleExpiryPage extends StatelessWidget {
                             children: [
                               _buildComparisonItem(
                                 'KM Used',
-                                tire.kmUsed != null
-                                    ? '${tire.kmUsed} km'
+                                tyre.kmUsed != null
+                                    ? '${tyre.kmUsed} km'
                                     : 'N/A',
                                 null,
                               ),
                               const SizedBox(height: 12),
                               _buildComparisonItem(
                                 'Installation Date',
-                                "${tire.installDt ?? "N/A"}",
+                                "${tyre.installDt ?? "N/A"}",
                                 null,
                               ),
                             ],
@@ -1727,31 +1727,31 @@ class VehicleExpiryPage extends StatelessWidget {
                       ],
                     );
                   } else {
-                    // Single-column layout for tire details
+                    // Single-column layout for tyre details
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildComparisonItem(
                           'Position',
-                          tire.position ?? 'N/A',
+                          tyre.position ?? 'N/A',
                           null,
                         ),
                         const SizedBox(height: 12),
                         _buildComparisonItem(
                           'Size',
-                          tire.size ?? 'N/A',
+                          tyre.size ?? 'N/A',
                           null,
                         ),
                         const SizedBox(height: 12),
                         _buildComparisonItem(
                           'KM Used',
-                          tire.kmUsed != null ? '${tire.kmUsed} km' : 'N/A',
+                          tyre.kmUsed != null ? '${tyre.kmUsed} km' : 'N/A',
                           null,
                         ),
                         const SizedBox(height: 12),
                         _buildComparisonItem(
                           'Installation Date',
-                          "${tire.installDt ?? 'N/A'}",
+                          "${tyre.installDt ?? 'N/A'}",
                           null,
                         ),
                       ],
@@ -1889,29 +1889,29 @@ class VehicleExpiryPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            _buildComparisonRow(
-              'Condition',
-              controller.selectedVehicle.value!['condition'],
-              controller.previousData.value!['vehicleCondition'],
-              _getConditionDifference(
-                controller.selectedVehicle.value!['condition'],
-                controller.previousData.value!['vehicleCondition'],
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildComparisonRow(
-              'KM Reading',
-              '${controller.selectedVehicle.value!['currentKm']} km',
-              '${controller.previousData.value!['kmAtRenewal']} km',
-              '+${controller.selectedVehicle.value!['currentKm'] - controller.previousData.value!['kmAtRenewal']} km',
-            ),
-            const SizedBox(height: 12),
-            _buildComparisonRow(
-              'Vehicle Age',
-              '${DateTime.now().year - controller.selectedVehicle.value!['year']} years',
-              '${controller.previousData.value!['date'].year - controller.selectedVehicle.value!['year']} years',
-              '+1 year',
-            ),
+            // _buildComparisonRow(
+            //   'Condition',
+            //   controller.selectedVehicle.value!['condition'],
+            //   controller.previousData.value!['vehicleCondition'],
+            //   _getConditionDifference(
+            //     controller.selectedVehicle.value!['condition'],
+            //     controller.previousData.value!['vehicleCondition'],
+            //   ),
+            // ),
+            // const SizedBox(height: 12),
+            // _buildComparisonRow(
+            //   'KM Reading',
+            //   '${controller.selectedVehicle.value!['currentKm']} km',
+            //   '${controller.previousData.value!['kmAtRenewal']} km',
+            //   '+${controller.selectedVehicle.value!['currentKm'] - controller.previousData.value!['kmAtRenewal']} km',
+            // ),
+            // const SizedBox(height: 12),
+            // _buildComparisonRow(
+            //   'Vehicle Age',
+            //   '${DateTime.now().year - controller.selectedVehicle.value!['year']} years',
+            //   '${controller.previousData.value!['date'].year - controller.selectedVehicle.value!['year']} years',
+            //   '+1 year',
+            // ),
           ],
         ),
       ),
@@ -2018,7 +2018,6 @@ class VehicleExpiryPage extends StatelessWidget {
       ],
     );
   }
-
 
   Widget _buildComparisonActions(ExpiryDetailsController controller) {
     return Row(
@@ -2365,7 +2364,7 @@ class VehicleExpiryPage extends StatelessWidget {
     final serviceTypes = [
       'Oil Change',
       'Brake Service',
-      'Tire Rotation',
+      'Tyre Rotation',
       'Battery Replacement',
       'General Maintenance',
       'Air Conditioning',

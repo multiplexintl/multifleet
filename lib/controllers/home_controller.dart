@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:multifleet/repo/home_repo.dart';
 import 'package:multifleet/routes.dart';
+import 'package:multifleet/services/company_service.dart';
 
 import '../models/user.dart';
 import '../models/vehicle_docs.dart';
@@ -11,6 +12,7 @@ import '../services/user_service.dart';
 
 class HomeScreenController extends GetxController {
   UserService userService = Get.find<UserService>();
+  final companyService = Get.find<CompanyService>();
 
   User? get user => userService.user;
   final RxInt currentSidebarIndex = 0.obs;
@@ -44,7 +46,8 @@ class HomeScreenController extends GetxController {
   // need to get vehicle docs and create a list of near expiry list of vehicles
 
   Future<void> getVehicleDocs() async {
-    var res = await HomeRepo().getVehicleDocs(company: 'EPIC01');
+    var res = await HomeRepo().getVehicleDocs(
+        company: '${companyService.selectedCompanyObs.value?.id}');
     res.fold((error) {}, (docs) {
       // log(docs.toString());
       if (docs.isNotEmpty) {

@@ -3,8 +3,9 @@ import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:multifleet/routes.dart';
+import 'package:multifleet/services/company_service.dart';
 
-import 'package:multifleet/views/add_edit_vehicle.dart';
+import 'package:multifleet/views/edit_vehicle.dart';
 import 'package:multifleet/views/assigned_vehicle_page.dart';
 import 'package:multifleet/views/expiry_page.dart';
 import 'package:multifleet/views/header/dashboard.dart';
@@ -14,6 +15,7 @@ import 'package:multifleet/views/vehicle_assignment.dart';
 import 'package:multifleet/views/vehicles_listing.dart';
 
 import '../controllers/home_controller.dart';
+import '../models/company.dart';
 import 'fine_details_page.dart';
 import 'header/profile.dart';
 import 'header/settings.dart';
@@ -23,10 +25,14 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    log(MediaQuery.of(context).size.width.toString());
     final HomeScreenController controller = Get.find<HomeScreenController>();
     return Scaffold(
       drawer: MediaQuery.of(context).size.width < 600
           ? _buildMobileDrawer(context)
+          : null,
+      endDrawer: MediaQuery.of(context).size.width < 1100
+          ? _buildEndDrawer(context)
           : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -95,6 +101,7 @@ class HomeScreen extends StatelessWidget {
   // Mobile drawer based on the existing sidebar items
   Widget _buildMobileDrawer(BuildContext context) {
     final HomeScreenController controller = Get.find<HomeScreenController>();
+    var companyService = Get.find<CompanyService>();
 
     return Drawer(
       child: Container(
@@ -114,20 +121,40 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-            // Home option in drawer
-            _drawerItem(
-              Icons.home,
-              'Home',
-              -1,
-              () {
-                controller.changeHeaderPage(1);
-                controller.changeSidebarPage(0);
-                Navigator.pop(context);
-              },
-              controller,
-              isHeader: true,
-              headerIndex: 1,
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Obx(() => Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: _buildDropdown<Company>(
+                      label: "Company",
+                      icon: Icons.apartment,
+                      options: companyService.companyList,
+                      value: companyService.selectedCompanyObs.value,
+                      displayTextBuilder: (text) => text.name!,
+                      onChanged: (val) {
+                        companyService.selectCompany(val!);
+                      },
+                    ),
+                  )),
             ),
+            // Home option in drawer
+            // _drawerItem(
+            //   Icons.home,
+            //   'Home',
+            //   -1,
+            //   () {
+            //     controller.changeHeaderPage(1);
+            //     controller.changeSidebarPage(0);
+            //     Navigator.pop(context);
+            //   },
+            //   controller,
+            //   isHeader: true,
+            //   headerIndex: 1,
+            // ),
             // Dashboard option in drawer
             _drawerItem(
               Icons.dashboard,
@@ -250,7 +277,108 @@ class HomeScreen extends StatelessWidget {
               },
               controller,
             ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 20),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Get.offAllNamed(RouteLinks.login);
+                },
+                icon: const Icon(Icons.logout, color: Colors.white),
+                label: const Text('Logout'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEndDrawer(BuildContext context) {
+    final HomeScreenController controller = Get.find<HomeScreenController>();
+
+    return Drawer(
+      child: Container(
+        color: Colors.blue[50],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 0),
+          child: ListView(
+            padding: EdgeInsets.only(top: 0),
+            children: [
+              DrawerHeader(
+                decoration: BoxDecoration(
+                  color: Colors.blue[800],
+                ),
+                child: const Text(
+                  'MultiFleet',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                  ),
+                ),
+              ),
+              _headerEndDrawerItem(
+                context,
+                'Dashboard',
+                2,
+                controller,
+                onPressed: () {
+                  controller.changeHeaderPage(2);
+                  Get.back();
+                },
+              ),
+              _headerEndDrawerItem(
+                context,
+                'Reports',
+                3,
+                controller,
+                onPressed: () {
+                  controller.changeHeaderPage(3);
+                  Get.back();
+                },
+              ),
+              _headerEndDrawerItem(
+                context,
+                'Settings',
+                4,
+                controller,
+                onPressed: () {
+                  controller.changeHeaderPage(4);
+                  Get.back();
+                },
+              ),
+              _headerEndDrawerItem(
+                context,
+                'Profile',
+                5,
+                controller,
+                onPressed: () {
+                  controller.changeHeaderPage(5);
+                  Get.back();
+                },
+              ),
+
+              // Logout Button
+              Padding(
+                padding: const EdgeInsets.only(left: 12, right: 12, top: 50),
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Get.offAllNamed(RouteLinks.login);
+                  },
+                  icon: const Icon(Icons.logout, color: Colors.white),
+                  label: const Text('Logout'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -351,7 +479,7 @@ class HomeScreen extends StatelessWidget {
   Widget _buildHeader(BuildContext context) {
     bool isMobile = MediaQuery.of(context).size.width < 600;
     final HomeScreenController controller = Get.find<HomeScreenController>();
-
+    var companyService = Get.find<CompanyService>();
     return Container(
       color: Colors.blue[800],
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -368,10 +496,29 @@ class HomeScreen extends StatelessWidget {
                 },
               ),
             ),
-
+          if (!isMobile)
+            Obx(() => Container(
+                  // height: 50,
+                  width: 400,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: _buildDropdown<Company>(
+                    label: "Company",
+                    icon: Icons.apartment,
+                    options: companyService.companyList,
+                    value: companyService.selectedCompanyObs.value,
+                    displayTextBuilder: (text) => text.name!,
+                    onChanged: (val) {
+                      companyService.selectCompany(val!);
+                    },
+                  ),
+                )),
           // Logo or App Name
           Text(
-            isMobile ? 'MultiFleet' : 'MultiFleet Vehicle Management System',
+            // isMobile ? 'MultiFleet' : 'MultiFleet Vehicle Management System',
+            'MultiFleet',
             style: TextStyle(
               color: Colors.white,
               fontSize: 20,
@@ -380,7 +527,7 @@ class HomeScreen extends StatelessWidget {
           ),
 
           // Header Navigation Items
-          if (!isMobile)
+          if (MediaQuery.of(context).size.width > 1200)
             Wrap(
               spacing: 16,
               children: [
@@ -444,6 +591,24 @@ class HomeScreen extends StatelessWidget {
                 ),
               ],
             ),
+          if (MediaQuery.of(context).size.width < 1200 &&
+              MediaQuery.of(context).size.width > 600)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: IconButton(
+                icon: const Icon(Icons.menu_open, color: Colors.white),
+                onPressed: () {
+                  Scaffold.of(context).openEndDrawer();
+                },
+              ),
+            ),
+          if (MediaQuery.of(context).size.width < 600)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: IconButton(
+                  icon: const Icon(Icons.menu_open, color: Colors.transparent),
+                  onPressed: null),
+            ),
         ],
       ),
     );
@@ -481,9 +646,45 @@ class HomeScreen extends StatelessWidget {
         ));
   }
 
+  Widget _headerEndDrawerItem(BuildContext context, String title, int pageIndex,
+      HomeScreenController controller,
+      {required void Function()? onPressed}) {
+    return Obx(() => Padding(
+          padding: const EdgeInsets.only(left: 12, right: 12, top: 8.0),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: controller.currentHeaderIndex.value == pageIndex
+                  ? Colors.white
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: TextButton(
+              onPressed: onPressed,
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: controller.currentHeaderIndex.value == pageIndex
+                      ? FontWeight.bold
+                      : FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ));
+  }
+
   // Sidebar Navigation
   Widget _buildSidebar(
       bool isMobile, bool isTablet, HomeScreenController controller) {
+    // var companyService = Get.find<CompanyService>();
     return Container(
       width: isMobile ? 60 : (isTablet ? 120 : 250),
       color: Colors.blue[50],
@@ -575,6 +776,37 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDropdown<T>({
+    required String label,
+    required T? value,
+    required List<T> options,
+    required void Function(T?) onChanged,
+    required IconData icon,
+    String Function(T)? displayTextBuilder, // Optional custom display text
+  }) {
+    return DropdownButtonFormField<T>(
+      value: value,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      items: options.map((option) {
+        return DropdownMenuItem<T>(
+          value: option,
+          child: Text(displayTextBuilder != null
+              ? displayTextBuilder(option)
+              : option.toString()),
+        );
+      }).toList(),
+      onChanged: onChanged,
+      isDense: true,
+      isExpanded: true,
     );
   }
 

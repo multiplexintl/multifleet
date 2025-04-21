@@ -30,7 +30,7 @@ class _DashboardPageState extends State<DashboardPage> {
   final List<MaintenanceRecord> upcomingMaintenance = [
     MaintenanceRecord(
         'TRK-1234', 'Oil Change', DateTime.now().add(const Duration(days: 2))),
-    MaintenanceRecord('VAN-5678', 'Tire Rotation',
+    MaintenanceRecord('VAN-5678', 'Tyre Rotation',
         DateTime.now().add(const Duration(days: 3))),
     MaintenanceRecord('SUV-9012', 'Brake Inspection',
         DateTime.now().add(const Duration(days: 5))),
@@ -697,9 +697,9 @@ class _DashboardPageState extends State<DashboardPage> {
               'medium',
             ),
             _buildAlertItem(
-              'Tire Pressure',
+              'Tyre Pressure',
               'CAR-3456',
-              'Left rear tire pressure low',
+              'Left rear tyre pressure low',
               Colors.blue,
               DateTime.now().subtract(const Duration(hours: 18)),
               'low',

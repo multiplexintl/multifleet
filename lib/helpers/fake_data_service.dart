@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import '../models/tire.dart';
+import '../models/tyre.dart';
 import '../models/vehicle.dart';
 
 class FakeVehicleData {
@@ -31,11 +31,11 @@ class FakeVehicleData {
         // fuelStation: index % 2 == 0 ? 'ENOC' : 'ADNOC',
         // condition: 'Good',
         // status: index % 3 == 0 ? 'Active' : 'Inactive',
-        // tires: List.generate(4, (tireIndex) {
-        //   return Tire(
+        // tyres: List.generate(4, (tyreIndex) {
+        //   return Tyre(
         //     brand: 'Michelin',
-        //     model: 'MX-${tireIndex + 1}',
-        //     km: '${5000 + tireIndex * 1000}',
+        //     model: 'MX-${tyreIndex + 1}',
+        //     km: '${5000 + tyreIndex * 1000}',
         //   );
         // }),
       );

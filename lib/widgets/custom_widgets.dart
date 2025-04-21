@@ -55,16 +55,22 @@ class CustomWidget {
   static Future<void> customSnackBar({
     required String title,
     required String message,
-    required bool isError,
+    bool isError = false,
+    bool isInfo = false,
     int? duration,
+    void Function()? onClose,
   }) async {
     return CustomSnackbar.show(
       title: title,
       message: message,
-      backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+      backgroundColor: isError
+          ? Colors.red.shade700
+          : isInfo
+              ? Colors.teal.shade300
+              : Colors.green.shade700,
       duration: Duration(seconds: duration ?? 3),
-      position: SnackbarPosition.topRight, // customize here
-      onClose: () => log("Snackbar closed"),
+      position: SnackbarPosition.topRight,
+      onClose: onClose,
     );
   }
 }

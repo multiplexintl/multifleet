@@ -6,11 +6,13 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:multifleet/helpers/fake_data_service.dart';
 import 'package:multifleet/models/vehicle.dart';
+import 'package:multifleet/services/company_service.dart';
 
 import '../repo/vehicles_repo.dart';
 import '../widgets/custom_widgets.dart';
 
 class VehicleAssignmentController extends GetxController {
+  final companyService = Get.find<CompanyService>();
   // Text controllers
   final TextEditingController plateNumberController =
       TextEditingController(text: "11908-AA");
@@ -78,7 +80,8 @@ class VehicleAssignmentController extends GetxController {
 
       if (plateNumberController.text.isNotEmpty) {
         var res = await VehiclesRepo().getAllVehicles(
-            company: 'EPIC01', query: plateNumberController.text);
+            company: '${companyService.selectedCompanyObs.value?.id}',
+            query: plateNumberController.text);
         res.fold((error) {
           log(error);
         }, (vehicles) {

@@ -5,7 +5,7 @@ import 'package:get/get.dart';
 import 'package:multifleet/models/vehicle.dart';
 
 import '../controllers/vehicle_listing_controller.dart';
-import '../models/tire.dart';
+import '../models/tyre.dart';
 import '../models/vehicle_docs.dart';
 
 class VehiclesListingPage extends StatelessWidget {
@@ -19,10 +19,12 @@ class VehiclesListingPage extends StatelessWidget {
       body: Padding(
         padding: const EdgeInsets.only(left: 20, right: 20, top: 30),
         child: Obx(() => controller.isLoading.value
-            ? SizedBox(
-                height: 25,
-                width: 25,
-                child: CircularProgressIndicator.adaptive(),
+            ? Center(
+                child: SizedBox(
+                  height: 25,
+                  width: 25,
+                  child: CircularProgressIndicator.adaptive(),
+                ),
               )
             : Column(
                 children: [
@@ -391,14 +393,14 @@ class VehiclesListingPage extends StatelessWidget {
                         ],
                       ),
 
-                    // Tires Section
-                    if (vehicle.tires != null && vehicle.tires!.isNotEmpty)
+                    // Tyres Section
+                    if (vehicle.tyres != null && vehicle.tyres!.isNotEmpty)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           SizedBox(height: 16),
-                          _buildSectionTitle('Tire Details'),
-                          ...vehicle.tires!.map((tire) => _buildTireCard(tire)),
+                          _buildSectionTitle('Tyre Details'),
+                          ...vehicle.tyres!.map((tyre) => _buildTyreCard(tyre)),
                         ],
                       ),
                   ],
@@ -472,8 +474,8 @@ class VehiclesListingPage extends StatelessWidget {
     );
   }
 
-// Helper method to build tire cards
-  Widget _buildTireCard(Tire tire) {
+// Helper method to build tyre cards
+  Widget _buildTyreCard(Tyre tyre) {
     return Card(
       margin: EdgeInsets.symmetric(vertical: 4),
       color: Colors.white.withOpacity(0.9),
@@ -486,21 +488,21 @@ class VehiclesListingPage extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  tire.position ?? 'Unknown Position',
+                  tyre.position ?? 'Unknown Position',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
                   ),
                 ),
-                if (tire.expDt != null)
+                if (tyre.expDt != null)
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _getExpiryColor(tire.expDt?.toIso8601String()),
+                      color: _getExpiryColor(tyre.expDt?.toIso8601String()),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Expires: ${tire.formatDate(tire.expDt)}',
+                      'Expires: ${tyre.formatDate(tyre.expDt)}',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -511,13 +513,13 @@ class VehiclesListingPage extends StatelessWidget {
               ],
             ),
             Divider(),
-            _buildDetailRow('Brand', tire.brand ?? ''),
-            _buildDetailRow('Size', tire.size ?? ''),
-            _buildDetailRow('KM Used', tire.kmUsed?.toString() ?? '0'),
-            if (tire.installDt != null)
-              _buildDetailRow('Install Date', tire.formatDate(tire.installDt)),
-            if (tire.remarks != null && tire.remarks!.isNotEmpty)
-              _buildDetailRow('Remarks', tire.remarks ?? ''),
+            _buildDetailRow('Brand', tyre.brand ?? ''),
+            _buildDetailRow('Size', tyre.size ?? ''),
+            _buildDetailRow('KM Used', tyre.kmUsed?.toString() ?? '0'),
+            if (tyre.installDt != null)
+              _buildDetailRow('Install Date', tyre.formatDate(tyre.installDt)),
+            if (tyre.remarks != null && tyre.remarks!.isNotEmpty)
+              _buildDetailRow('Remarks', tyre.remarks ?? ''),
           ],
         ),
       ),
@@ -620,8 +622,8 @@ class VehiclesListingPage extends StatelessWidget {
 
     // Return appropriate color based on days remaining
     if (daysUntilExpiry < 0) return Colors.red.shade800; // Already expired
-    if (daysUntilExpiry <= 30) return Colors.red;
-    if (daysUntilExpiry <= 90) return Colors.orange;
+    if (daysUntilExpiry <= 30) return Colors.orange;
+    if (daysUntilExpiry <= 90) return Colors.amber;
     return Colors.green;
   }
 }

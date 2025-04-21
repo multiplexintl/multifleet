@@ -24,13 +24,13 @@ class _DubaiLicensePlateWidgetState extends State<DubaiLicensePlateWidget> {
 
   final Map<String, String> _emiratesMap = {
     'DUBAI': 'دبي',
-    'U.A.E': 'الإمارات',
-    // 'ABU DHABI': 'أبوظبي',
-    // 'SHARJAH': 'الشارقة',
-    // 'AJMAN': 'عجمان',
-    // 'UMM AL QUWAIN': 'أم القيوين',
-    // 'RAS AL KHAIMAH': 'رأس الخيمة',
-    // 'FUJAIRAH': 'الفجيرة',
+    // 'U.A.E': 'الإمارات',
+    'ABU DHABI': 'أبوظبي',
+    'SHARJAH': 'الشارقة',
+    'AJMAN': 'عجمان',
+    'UMM AL QUWAIN': 'أم القيوين',
+    'RAS AL KHAIMAH': 'رأس الخيمة',
+    'FUJAIRAH': 'الفجيرة',
   };
 
   void _updateParent() {
@@ -224,13 +224,13 @@ class _DubaiLicensePlateWidgetState extends State<DubaiLicensePlateWidget> {
             controller: controller,
             autofocus: true,
             decoration: const InputDecoration(
-              hintText: 'A, B, AB, etc.',
+              hintText: 'A, B, AB, 1, 2, 3 etc.',
               labelText: 'Letter Code',
             ),
             textCapitalization: TextCapitalization.characters,
             inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp('[A-Za-z]')),
-              LengthLimitingTextInputFormatter(2),
+              // FilteringTextInputFormatter.allow(RegExp('[A-Za-z]')),
+              LengthLimitingTextInputFormatter(4),
             ],
             onChanged: (value) {
               controller.value = controller.value.copyWith(
@@ -266,7 +266,7 @@ class _DubaiLicensePlateWidgetState extends State<DubaiLicensePlateWidget> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Select Emirate'),
+          title: const Text('Select Emirate/City'),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(

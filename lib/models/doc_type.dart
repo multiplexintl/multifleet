@@ -40,6 +40,20 @@ class DocumentType {
     };
   }
 
+  // Override == operator for proper value comparison
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is DocumentType &&
+        other.company == company &&
+        other.docType == docType &&
+        other.docDescription == docDescription;
+  }
+
+  // Always override hashCode when overriding ==
+  @override
+  int get hashCode => Object.hash(company, docType, docDescription);
+
   // toString method
   @override
   String toString() {

@@ -1,15 +1,11 @@
-import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:multifleet/controllers/loading_controller.dart';
 import 'package:multifleet/controllers/login_controller.dart';
-import 'package:multifleet/routes.dart';
-import 'package:multifleet/widgets/custom_widgets.dart';
 
 import 'package:multifleet/widgets/loading.dart';
 
-import '../widgets/custom_snackbar.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -82,6 +78,9 @@ class LoginScreen extends StatelessWidget {
                         Obx(() => TextField(
                               controller: con.pwdController,
                               obscureText: !con.isPwdVisible.value,
+                              onSubmitted: (value) {
+                                con.login();
+                              },
                               decoration: InputDecoration(
                                 labelText: 'Password',
                                 prefixIcon: Icon(Icons.lock_outline,

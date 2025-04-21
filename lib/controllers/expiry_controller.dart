@@ -208,16 +208,16 @@ class ExpiryDetailsController extends GetxController {
     applyFilters();
   }
 
-String getExpiryStatus(DateTime? expiryDate) {
-  if (expiryDate == null) return 'Unknown';
-  
-  final now = DateTime.now();
-  final daysUntilExpiry = expiryDate.difference(now).inDays;
-  
-  if (daysUntilExpiry < 0) return 'Expired';
-  if (daysUntilExpiry <= 30) return 'Soon';
-  return 'Valid';
-}
+  String getExpiryStatus(DateTime? expiryDate) {
+    if (expiryDate == null) return 'Unknown';
+
+    final now = DateTime.now();
+    final daysUntilExpiry = expiryDate.difference(now).inDays;
+
+    if (daysUntilExpiry < 0) return 'Expired';
+    if (daysUntilExpiry <= 30) return 'Soon';
+    return 'Valid';
+  }
 
   Color getStatusColor(String status) {
     switch (status) {

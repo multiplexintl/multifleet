@@ -1,4 +1,4 @@
-class Tire {
+class Tyre {
   final int? tyreId;
   final String? vehicleNo;
   final String? position;
@@ -10,7 +10,7 @@ class Tire {
   final String? remarks;
   final DateTime? createdDt;
 
-  Tire({
+  Tyre({
     this.tyreId,
     this.vehicleNo,
     this.position,
@@ -24,7 +24,7 @@ class Tire {
   });
 
   // Copy with method
-  Tire copyWith({
+  Tyre copyWith({
     int? tyreId,
     String? vehicleNo,
     String? position,
@@ -36,7 +36,7 @@ class Tire {
     String? remarks,
     DateTime? createdDt,
   }) {
-    return Tire(
+    return Tyre(
       tyreId: tyreId ?? this.tyreId,
       vehicleNo: vehicleNo ?? this.vehicleNo,
       position: position ?? this.position,
@@ -50,22 +50,36 @@ class Tire {
     );
   }
 
-  // From JSON factory constructor
-  factory Tire.fromJson(Map<String, dynamic> json) {
-    return Tire(
+  // From JSON factory constructor with minimum date handling
+  factory Tyre.fromJson(Map<String, dynamic> json) {
+    return Tyre(
       tyreId: json['TyreId'],
       vehicleNo: json['VehicleNo'],
       position: json['Position'],
       brand: json['Brand'],
       size: json['Size'],
-      installDt:
-          json['InstallDt'] != null ? DateTime.parse(json['InstallDt']) : null,
-      expDt: json['ExpDt'] != null ? DateTime.parse(json['ExpDt']) : null,
+      installDt: _parseDate(json['InstallDt']),
+      expDt: _parseDate(json['ExpDt']),
       kmUsed: json['KMUsed'],
       remarks: json['Remarks'],
-      createdDt:
-          json['CreatedDt'] != null ? DateTime.parse(json['CreatedDt']) : null,
+      createdDt: _parseDate(json['CreatedDt']),
     );
+  }
+
+  // Helper method to parse dates and handle minimum date values
+  static DateTime? _parseDate(dynamic dateValue) {
+    if (dateValue == null) return null;
+
+    try {
+      final date = DateTime.parse(dateValue.toString());
+
+      // Check if this is a minimum date (year 1 or 0001-01-01)
+      if (date.year <= 1) return null;
+
+      return date;
+    } catch (e) {
+      return null; // Return null for invalid dates
+    }
   }
 
   // To JSON method
@@ -84,9 +98,9 @@ class Tire {
     };
   }
 
-  // Format date to DD/MM/YYYY
+  // Format date to DD/MM/YYYY with null handling
   String formatDate(DateTime? date) {
-    if (date == null || date.year == 1) {
+    if (date == null || date.year <= 1) {
       return '';
     }
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
@@ -95,7 +109,7 @@ class Tire {
   // toString method
   @override
   String toString() {
-    return 'Tire{tyreId: $tyreId, vehicleNo: $vehicleNo, position: $position, brand: $brand, size: $size, '
+    return 'Tyre{tyreId: $tyreId, vehicleNo: $vehicleNo, position: $position, brand: $brand, size: $size, '
         'installDt: ${formatDate(installDt)}, expDt: ${formatDate(expDt)}, kmUsed: $kmUsed, '
         'remarks: $remarks, createdDt: ${formatDate(createdDt)}}';
   }
