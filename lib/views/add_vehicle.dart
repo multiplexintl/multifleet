@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:developer';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:multifleet/controllers/loading_controller.dart';
+import 'package:multifleet/widgets/auto_complete_field.dart';
 import 'package:multifleet/widgets/loading.dart';
 
 import '../controllers/add_edit_vehicle_controller.dart';
@@ -329,20 +329,26 @@ Widget _buildBasicInfoStep(AddEditVehicleController con) {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _buildTextField(
+                child: buildAutocompleteTextField(
+                  context: context,
+                  storageKey: 'vehicle_brands',
                   controller: con.createBrandController,
                   label: 'Brand',
                   icon: Icons.branding_watermark,
                   isRequired: true,
+                  initialSuggestions: con.getBrandSuggestions(),
                 ),
               ),
               SizedBox(width: 16),
               Expanded(
-                child: _buildTextField(
+                child: buildAutocompleteTextField(
+                  context: context,
+                  storageKey: 'vehicle_models',
                   controller: con.createModelController,
                   label: 'Model',
                   icon: Icons.model_training,
                   isRequired: true,
+                  initialSuggestions: con.getModelSuggestions(),
                 ),
               ),
             ],
@@ -366,24 +372,11 @@ Widget _buildBasicInfoStep(AddEditVehicleController con) {
                   allowPastDates: true,
                   yearOnly: true,
                   onDateSelected: (p0) {
-                    log(con.yearController.text.toString());
+                    // log(con.yearController.text.toString());
                   },
                   controller: con.yearController,
                   label: 'Year',
                   icon: Icons.calendar_today,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _buildTextField(
-                  controller: con.createDescriptionController,
-                  label: 'Remarks',
-                  icon: Icons.edit,
                 ),
               ),
             ],
@@ -434,13 +427,23 @@ Widget _buildAdditionalDetailsStep(AddEditVehicleController con) {
               ),
               SizedBox(width: 16),
               Expanded(
-                child: _buildTextField(
-                  controller: con.currentOdoController,
-                  label: 'Current Odometer',
-                  icon: Icons.speed,
-                  keyboardType: TextInputType.number,
+                child: _buildDropdown(
+                  label: 'Fuel Station',
+                  value: con.selectedFuelStation.value,
+                  options: con.fuelStations,
+                  onChanged: (value) => con.selectedFuelStation.value = value,
+                  icon: Icons.local_gas_station,
                 ),
               ),
+
+              // Expanded(
+              //   child: _buildTextField(
+              //     controller: con.currentOdoController,
+              //     label: 'Current Odometer',
+              //     icon: Icons.speed,
+              //     keyboardType: TextInputType.number,
+              //   ),
+              // ),
             ],
           ),
           SizedBox(height: 16),
@@ -459,12 +462,10 @@ Widget _buildAdditionalDetailsStep(AddEditVehicleController con) {
               ),
               SizedBox(width: 16),
               Expanded(
-                child: _buildDropdown(
-                  label: 'Fuel Station',
-                  value: con.selectedFuelStation.value,
-                  options: con.fuelStations,
-                  onChanged: (value) => con.selectedFuelStation.value = value,
-                  icon: Icons.local_gas_station,
+                child: _buildTextField(
+                  controller: con.createDescriptionController,
+                  label: 'Remarks',
+                  icon: Icons.edit,
                 ),
               ),
             ],
@@ -478,7 +479,8 @@ Widget _buildAdditionalDetailsStep(AddEditVehicleController con) {
 Widget _buildStatusDocumentsStep(AddEditVehicleController con) {
   return LayoutBuilder(builder: (context, constraints) {
     // Calculate responsive values based on available width
-    final bool isSmallScreen = constraints.maxWidth < 600;
+    log("max width: ${constraints.maxWidth.toString()}");
+    final bool isSmallScreen = constraints.maxWidth < 300;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -486,83 +488,112 @@ Widget _buildStatusDocumentsStep(AddEditVehicleController con) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Vehicle condition and status section
-          isSmallScreen
-              ? Column(
-                  children: [
-                    _buildDropdown(
-                      label: 'Vehicle Condition',
-                      value: con.selectedCondition.value,
-                      options: con.vehicleConditions,
-                      onChanged: (value) => con.selectedCondition.value = value,
-                      icon: Icons.assessment,
-                    ),
-                    SizedBox(height: 16),
-                    _buildDropdown(
-                      label: 'Status',
-                      value: con.selectedStatus.value,
-                      options: con.vehicleStatuses,
-                      onChanged: (value) => con.selectedStatus.value = value,
-                      icon: Icons.flag,
-                    ),
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _buildDropdown(
-                        label: 'Vehicle Condition',
-                        value: con.selectedCondition.value,
-                        options: con.vehicleConditions,
-                        onChanged: (value) =>
-                            con.selectedCondition.value = value,
-                        icon: Icons.assessment,
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: _buildDropdown(
-                        label: 'Status',
-                        value: con.selectedStatus.value,
-                        options: con.vehicleStatuses,
-                        onChanged: (value) => con.selectedStatus.value = value,
-                        icon: Icons.flag,
-                      ),
-                    ),
-                  ],
+          // isSmallScreen
+          //     ? Column(
+          //         children: [
+          //           _buildDropdown(
+          //             label: 'Vehicle Condition',
+          //             value: con.selectedCondition.value,
+          //             options: con.vehicleConditions,
+          //             onChanged: (value) => con.selectedCondition.value = value,
+          //             icon: Icons.assessment,
+          //           ),
+          //           SizedBox(height: 16),
+          //           _buildDropdown(
+          //             label: 'Status',
+          //             value: con.selectedStatus.value,
+          //             options: con.vehicleStatuses,
+          //             onChanged: (value) => con.selectedStatus.value = value,
+          //             icon: Icons.flag,
+          //           ),
+          //         ],
+          //       )
+          //     :
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildDropdown(
+                  label: 'Vehicle Condition',
+                  value: con.selectedCondition.value,
+                  options: con.vehicleConditions,
+                  onChanged: (value) => con.selectedCondition.value = value,
+                  icon: Icons.assessment,
                 ),
+              ),
+              SizedBox(width: 16),
+              Expanded(
+                child: _buildDropdown(
+                  label: 'Status',
+                  value: con.selectedStatus.value,
+                  options: con.vehicleStatuses,
+                  onChanged: (value) => con.selectedStatus.value = value,
+                  icon: Icons.flag,
+                ),
+              ),
+            ],
+          ),
 
           SizedBox(height: 20),
           Divider(),
           SizedBox(height: 16),
 
           // Documents section header with add button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Vehicle Documents',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[800],
+          isSmallScreen
+              ? Column(
+                  children: [
+                    Text(
+                      'Vehicle Documents',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[800],
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddDocumentDialog(context, con),
+                      icon: Icon(
+                        Icons.add_circle_outline,
+                        color: Colors.white,
+                      ),
+                      label: Text('Add Document'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[800],
+                        foregroundColor: Colors.white,
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Vehicle Documents',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[800],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddDocumentDialog(context, con),
+                      icon: Icon(
+                        Icons.add_circle_outline,
+                        color: Colors.white,
+                      ),
+                      label: Text('Add Document'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[800],
+                        foregroundColor: Colors.white,
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => _showAddDocumentDialog(context, con),
-                icon: Icon(
-                  Icons.add_circle_outline,
-                  color: Colors.white,
-                ),
-                label: Text('Add Document'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[800],
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-              ),
-            ],
-          ),
           SizedBox(height: 16),
 
           // Dynamic document list
@@ -611,6 +642,10 @@ Widget _buildDocumentItem(AddEditVehicleController con, int index,
       con.documentExpiryControllers[index];
   final TextEditingController issueAuthorityController =
       con.createDocumentIssueAuthorityControllers[index];
+  final TextEditingController remarksController =
+      con.createDocumentRemarksControllers[index];
+  final TextEditingController documentTypeController =
+      con.createDocumentTypesControllers[index];
 
   return Card(
     margin: EdgeInsets.only(bottom: 16),
@@ -642,13 +677,14 @@ Widget _buildDocumentItem(AddEditVehicleController con, int index,
           ),
           SizedBox(height: 16),
           _buildDocumentFieldsColumn(
-            con,
-            index,
-            document,
-            issueDateController,
-            expiryDateController,
-            issueAuthorityController,
-          )
+              con: con,
+              index: index,
+              document: document,
+              issueDateController: issueDateController,
+              expiryDateController: expiryDateController,
+              issueAuthorityController: issueAuthorityController,
+              docTypeController: documentTypeController,
+              remarksController: remarksController)
         ],
       ),
     ),
@@ -656,13 +692,16 @@ Widget _buildDocumentItem(AddEditVehicleController con, int index,
 }
 
 // Document fields in a column layout for small screens
-Widget _buildDocumentFieldsColumn(
-    AddEditVehicleController con,
-    int index,
-    VehicleDocument document,
-    TextEditingController issueDateController,
-    TextEditingController expiryDateController,
-    TextEditingController issueAuthorityController) {
+Widget _buildDocumentFieldsColumn({
+  required AddEditVehicleController con,
+  required int index,
+  required VehicleDocument document,
+  required TextEditingController issueDateController,
+  required TextEditingController expiryDateController,
+  required TextEditingController issueAuthorityController,
+  required TextEditingController docTypeController,
+  required TextEditingController remarksController,
+}) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -695,19 +734,21 @@ Widget _buildDocumentFieldsColumn(
         icon: Icons.calendar_month,
       ),
       SizedBox(height: 16),
+      _buildTextField(
+          controller: issueAuthorityController,
+          label: "Document Type",
+          icon: Icons.edit_document,
+          onChanged: (value) => con.updateDocumentType(index, value)),
+      SizedBox(
+        height: 16,
+      ),
 
       // Issue Authority (text field)
-      TextField(
-        controller: issueAuthorityController,
-        decoration: InputDecoration(
-          labelText: 'Issue Authority',
-          prefixIcon: Icon(Icons.business),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        onChanged: (value) => con.updateDocumentIssueAuthority(index, value),
-      ),
+      _buildTextField(
+          controller: issueAuthorityController,
+          label: "Issue Authority",
+          icon: Icons.business,
+          onChanged: (value) => con.updateDocumentIssueAuthority(index, value)),
       SizedBox(height: 16),
 
       // City Dropdown
@@ -718,6 +759,13 @@ Widget _buildDocumentFieldsColumn(
         onChanged: (value) => con.updateDocumentCity(index, value),
         icon: Icons.location_city,
       ),
+      SizedBox(height: 16),
+      _buildTextField(
+          controller: remarksController,
+          label: "Remarks",
+          icon: Icons.edit,
+          onChanged: (value) => con.updateDocumentRemarks(index, value)),
+      SizedBox(height: 16),
     ],
   );
 }
@@ -737,9 +785,9 @@ void _showAddDocumentDialog(
         title: Text('Add Document'),
         content: Obx(() {
           // Get available document types not already added
-          final availableTypes = con.availableDocumentTypes
-              .where((docType) => !con.isDocumentTypeAlreadyAdded(docType))
-              .toList();
+          // final availableTypes = con.availableDocumentTypes
+          //     .where((docType) => !con.isDocumentTypeAlreadyAdded(docType))
+          //     .toList();
 
           return DropdownButtonFormField<int>(
             decoration: InputDecoration(
@@ -748,7 +796,7 @@ void _showAddDocumentDialog(
               prefixIcon: Icon(Icons.file_present),
             ),
             value: selectedDocTypeId.value,
-            items: availableTypes.map((DocumentType type) {
+            items: con.availableDocumentTypes.map((DocumentType type) {
               return DropdownMenuItem<int>(
                 value: type.docType, // Use docType (int) as the value
                 child: Text(type.docDescription ?? 'Unknown'),
@@ -947,7 +995,7 @@ Widget _buildTyreCard(
                         controller: brandController,
                         label: 'Brand',
                         onChanged: (value) {
-                          log(value);
+                          // log(value);
                           con.createUpdateTyreBrand(index, value);
                         }),
                     SizedBox(height: 12),

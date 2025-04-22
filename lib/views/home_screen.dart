@@ -122,7 +122,8 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.only(
+                  left: 25, right: 10, top: 20, bottom: 30),
               child: Obx(() => Container(
                     height: 50,
                     decoration: BoxDecoration(
@@ -963,11 +964,13 @@ class HomeScreen extends StatelessWidget {
             children: [
               Icon(icon, color: Colors.blue[800]),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[800],
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[800],
+                  ),
                 ),
               ),
             ],

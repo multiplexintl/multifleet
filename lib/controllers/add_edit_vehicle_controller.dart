@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:multifleet/controllers/loading_controller.dart';
@@ -26,7 +27,7 @@ class AddEditVehicleController extends GetxController
   var loadingCon = Get.find<LoadingController>();
   var companyService = Get.find<CompanyService>();
   // Text controllers for search and create vehicle
-  final plateNumberController = TextEditingController(text: "D-25502");
+  final plateNumberController = TextEditingController(text: "D-25503");
   final createPlateNumberController = TextEditingController();
   final createBrandController = TextEditingController();
   final createModelController = TextEditingController();
@@ -41,6 +42,10 @@ class AddEditVehicleController extends GetxController
   final RxList<TextEditingController> createDocumentExpiryControllers =
       <TextEditingController>[].obs;
   final RxList<TextEditingController> createDocumentIssueAuthorityControllers =
+      <TextEditingController>[].obs;
+  final RxList<TextEditingController> createDocumentTypesControllers =
+      <TextEditingController>[].obs;
+  final RxList<TextEditingController> createDocumentRemarksControllers =
       <TextEditingController>[].obs;
   // new tyres
   final RxList<TextEditingController> tyreBrandControllers =
@@ -138,6 +143,7 @@ class AddEditVehicleController extends GetxController
   void onInit() {
     companyService.registerController(this);
     loadDocumentTypes();
+    initializeSuggestions();
     super.onInit();
   }
 
@@ -228,6 +234,7 @@ class AddEditVehicleController extends GetxController
   Future<void> searchVehicle() async {
     try {
       isSearching.value = true;
+      vehicleData.value = null;
 
       if (plateNumberController.text.isNotEmpty) {
         var res2 = await VehiclesRepo().getAllVehicles(
@@ -751,6 +758,8 @@ class AddEditVehicleController extends GetxController
     ));
 
     createDocumentIssueAuthorityControllers.add(TextEditingController());
+    createDocumentTypesControllers.add(TextEditingController());
+    createDocumentRemarksControllers.add(TextEditingController());
   }
 
 // Remove document and associated controllers
@@ -785,6 +794,14 @@ class AddEditVehicleController extends GetxController
     );
   }
 
+  void updateDocumentType(int index, String documentType) {
+    final currentDoc = vehicleDocuments[index];
+
+    vehicleDocuments[index] = currentDoc.copyWith(
+      documentType: documentType,
+    );
+  }
+
 // Update document city
   void updateDocumentCity(int index, String? city) {
     if (city == null) return;
@@ -793,6 +810,14 @@ class AddEditVehicleController extends GetxController
 
     vehicleDocuments[index] = currentDoc.copyWith(
       city: city,
+    );
+  }
+
+  void updateDocumentRemarks(int index, String remarks) {
+    final currentDoc = vehicleDocuments[index];
+
+    vehicleDocuments[index] = currentDoc.copyWith(
+      remarks: remarks,
     );
   }
 
@@ -1357,5 +1382,181 @@ class AddEditVehicleController extends GetxController
       colorText: Colors.white,
       duration: Duration(seconds: 3),
     );
+  }
+}
+
+extension SuggestionManager on AddEditVehicleController {
+  // Initialize the suggestion lists from vehicle data
+  void initializeSuggestions() {
+    // Get the storage instance
+    final storage = GetStorage();
+
+    try {
+      // Check if we already have suggestions stored
+      List<String> existingBrands = [];
+      List<String> existingModels = [];
+
+      // Safely read from storage with proper type casting
+      final storedBrands = storage.read('vehicle_brands');
+      if (storedBrands != null) {
+        existingBrands =
+            (storedBrands as List).map((item) => item.toString()).toList();
+      }
+
+      final storedModels = storage.read('vehicle_models');
+      if (storedModels != null) {
+        existingModels =
+            (storedModels as List).map((item) => item.toString()).toList();
+      }
+
+      // Only try to extract from originalVehicles if it's not empty
+      if (vehicleCon.originalVehicles.isNotEmpty) {
+        log("Original Vehicle after refresh: ${vehicleCon.originalVehicles.length} items");
+
+        // Extract and add new unique brands from vehicles
+        for (var vehicle in vehicleCon.originalVehicles) {
+          if (vehicle.brand != null &&
+              vehicle.brand!.isNotEmpty &&
+              !existingBrands.contains(vehicle.brand)) {
+            existingBrands.add(vehicle.brand!);
+          }
+
+          if (vehicle.model != null &&
+              vehicle.model!.isNotEmpty &&
+              !existingModels.contains(vehicle.model)) {
+            existingModels.add(vehicle.model!);
+          }
+        }
+      } else {
+        log("Original vehicles list is empty or null");
+      }
+
+      // Default suggestions if both storage and originalVehicles are empty
+      if (existingBrands.isEmpty) {
+        existingBrands = [
+          'Toyota',
+          'Nissan',
+          'Honda',
+          'Mitsubishi',
+          'Ford',
+          'Chevrolet'
+        ];
+      }
+
+      if (existingModels.isEmpty) {
+        existingModels = [
+          'Corolla',
+          'Camry',
+          'Sunny',
+          'Patrol',
+          'Land Cruiser',
+          'Hiace'
+        ];
+      }
+
+      // Sort the lists
+      existingBrands.sort();
+      existingModels.sort();
+
+      // Save back to storage
+      storage.write('vehicle_brands', existingBrands);
+      storage.write('vehicle_models', existingModels);
+
+      log("Saved ${existingBrands.length} brands and ${existingModels.length} models to storage");
+    } catch (e) {
+      // If anything goes wrong, at least provide some default values
+      log("Error initializing suggestions: $e");
+
+      // Default fallback values
+      final defaultBrands = [
+        'Toyota',
+        'Nissan',
+        'Honda',
+        'Mitsubishi',
+        'Ford',
+        'Chevrolet'
+      ];
+      final defaultModels = [
+        'Corolla',
+        'Camry',
+        'Sunny',
+        'Patrol',
+        'Land Cruiser',
+        'Hiace'
+      ];
+
+      storage.write('vehicle_brands', defaultBrands);
+      storage.write('vehicle_models', defaultModels);
+    }
+  }
+
+  // Get brand suggestions with improved safety
+  List<String> getBrandSuggestions() {
+    try {
+      final storage = GetStorage();
+      final storedBrands = storage.read('vehicle_brands');
+
+      if (storedBrands != null) {
+        return (storedBrands as List).map((item) => item.toString()).toList();
+      }
+    } catch (e) {
+      log("Error retrieving brand suggestions: $e");
+    }
+
+    // Default fallback if storage fails
+    return ['Toyota', 'Nissan', 'Honda', 'Mitsubishi', 'Ford', 'Chevrolet'];
+  }
+
+  // Get model suggestions with improved safety
+  List<String> getModelSuggestions() {
+    try {
+      final storage = GetStorage();
+      final storedModels = storage.read('vehicle_models');
+
+      if (storedModels != null) {
+        return (storedModels as List).map((item) => item.toString()).toList();
+      }
+    } catch (e) {
+      log("Error retrieving model suggestions: $e");
+    }
+
+    // Default fallback if storage fails
+    return ['Corolla', 'Camry', 'Sunny', 'Patrol', 'Land Cruiser', 'Hiace'];
+  }
+
+  // Add a new brand suggestion
+  void addBrandSuggestion(String brand) {
+    if (brand.isEmpty) return;
+
+    try {
+      final storage = GetStorage();
+      List<String> brands = getBrandSuggestions();
+
+      if (!brands.contains(brand)) {
+        brands.add(brand);
+        brands.sort();
+        storage.write('vehicle_brands', brands);
+      }
+    } catch (e) {
+      log("Error adding brand suggestion: $e");
+    }
+  }
+
+  // Add a new model suggestion
+  void addModelSuggestion(String model) {
+    if (model.isEmpty) return;
+
+    try {
+      final storage = GetStorage();
+      List<String> models = getModelSuggestions();
+
+      if (!models.contains(model)) {
+        models.add(model);
+        models.sort();
+        storage.write('vehicle_models', models);
+      }
+    } catch (e) {
+      log("Error adding model suggestion: $e");
+    }
   }
 }

@@ -37,9 +37,10 @@ class VehiclesListingPage extends StatelessWidget {
                         return LayoutBuilder(
                           builder: (context, constraints) {
                             // Determine layout based on screen width
+                            log("maxwidth ${constraints.maxWidth.toString()}");
                             if (constraints.maxWidth < 600) {
                               return _buildMobileLayout(con.filteredVehicles);
-                            } else if (constraints.maxWidth < 1200) {
+                            } else if (constraints.maxWidth < 1400) {
                               return _buildTabletLayout(con.filteredVehicles);
                             } else {
                               return _buildDesktopLayout(con.filteredVehicles);

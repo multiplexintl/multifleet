@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
@@ -72,7 +73,7 @@ class VehicleListingController extends GetxController
             vehicleMap[vehicle.vehicleNo] = vehicle;
           }
         }
-
+        // log(vehicleMap.toString());
         // Fetch documents for each vehicle
         await fetchAndAttachDocuments(vehicleMap);
 

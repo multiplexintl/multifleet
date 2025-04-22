@@ -6,6 +6,8 @@ class VehicleDocument {
   final DateTime? expiryDate;
   final String? issueAuthority;
   final String? city;
+  final String? documentType;
+  final String? remarks;
 
   VehicleDocument({
     this.company,
@@ -15,6 +17,8 @@ class VehicleDocument {
     this.expiryDate,
     this.issueAuthority,
     this.city,
+    this.remarks,
+    this.documentType,
   });
 
   // Copy with method
@@ -26,6 +30,8 @@ class VehicleDocument {
     DateTime? expiryDate,
     String? issueAuthority,
     String? city,
+    String? remarks,
+    String? documentType,
   }) {
     return VehicleDocument(
       company: company ?? this.company,
@@ -35,6 +41,8 @@ class VehicleDocument {
       expiryDate: expiryDate ?? this.expiryDate,
       issueAuthority: issueAuthority ?? this.issueAuthority,
       city: city ?? this.city,
+      remarks: remarks ?? this.remarks,
+      documentType: documentType ?? this.documentType,
     );
   }
 
@@ -44,8 +52,11 @@ class VehicleDocument {
       company: json['Company'],
       vehicleNo: json['VehicleNo'],
       docType: json['DocType'],
-      issueDate: json['IssueDate'] != null ? DateTime.parse(json['IssueDate']) : null,
-      expiryDate: json['ExpiryDate'] != null ? DateTime.parse(json['ExpiryDate']) : null,
+      issueDate:
+          json['IssueDate'] != null ? DateTime.parse(json['IssueDate']) : null,
+      expiryDate: json['ExpiryDate'] != null
+          ? DateTime.parse(json['ExpiryDate'])
+          : null,
       issueAuthority: json['IssueAuthority'],
       city: json['City'],
     );
@@ -61,6 +72,8 @@ class VehicleDocument {
       'ExpiryDate': expiryDate?.toIso8601String(),
       'IssueAuthority': issueAuthority,
       'City': city,
+      'Remarks': remarks,
+      'Document Type': documentType
     };
   }
 
@@ -77,6 +90,6 @@ class VehicleDocument {
   String toString() {
     return 'VehicleDocument{company: $company, vehicleNo: $vehicleNo, docType: $docType, '
         'issueDate: ${formatDate(issueDate)}, expiryDate: ${formatDate(expiryDate)}, '
-        'issueAuthority: $issueAuthority, city: $city}';
+        'issueAuthority: $issueAuthority, city: $city, documentType: $documentType, remarks: $remarks}';
   }
 }
