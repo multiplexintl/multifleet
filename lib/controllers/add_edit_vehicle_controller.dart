@@ -5,16 +5,20 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:multifleet/controllers/general_masters.dart';
 import 'package:multifleet/controllers/loading_controller.dart';
 import 'package:multifleet/controllers/vehicle_listing_controller.dart';
+import 'package:multifleet/models/fuel_station/fuel_station.dart';
+import 'package:multifleet/models/status_master/status_master.dart';
 import 'package:multifleet/models/vehicle.dart';
 import 'package:multifleet/repo/vehicles_repo.dart';
 import 'package:multifleet/services/company_service.dart';
 import 'package:multifleet/widgets/custom_widgets.dart';
 import 'dart:math' as math;
 
+import '../models/city/city.dart';
 import '../models/company.dart';
-import '../models/doc_type.dart';
+import '../models/doc_master.dart';
 import '../models/tyre.dart';
 import '../models/vehicle_docs.dart';
 import '../models/vehicle_image.dart';
@@ -24,10 +28,11 @@ import '../views/add_vehicle.dart';
 class AddEditVehicleController extends GetxController
     implements CompanyAwareController {
   var vehicleCon = Get.find<VehicleListingController>();
+  var genCon = Get.find<GeneralMastersController>();
   var loadingCon = Get.find<LoadingController>();
   var companyService = Get.find<CompanyService>();
   // Text controllers for search and create vehicle
-  final plateNumberController = TextEditingController(text: "D-25503");
+  final plateNumberController = TextEditingController();
   final createPlateNumberController = TextEditingController();
   final createBrandController = TextEditingController();
   final createModelController = TextEditingController();
@@ -46,6 +51,8 @@ class AddEditVehicleController extends GetxController
   final RxList<TextEditingController> createDocumentTypesControllers =
       <TextEditingController>[].obs;
   final RxList<TextEditingController> createDocumentRemarksControllers =
+      <TextEditingController>[].obs;
+  final RxList<TextEditingController> createDocumentAmountControllers =
       <TextEditingController>[].obs;
   // new tyres
   final RxList<TextEditingController> tyreBrandControllers =
@@ -81,56 +88,31 @@ class AddEditVehicleController extends GetxController
   final mulkiyaExpiryController = TextEditingController();
   final Map<String, Map<int, TextEditingController>> tyreControllers = {};
 
-  // Available document types from API
-  final RxList<DocumentType> availableDocumentTypes = <DocumentType>[].obs;
-
-// Selected vehicle documents
-
 // Controllers for document expiry dates
   final RxList<TextEditingController> documentExpiryControllers =
       <TextEditingController>[].obs;
 
   // Observable values for dropdowns
-  final selectedCompany = Rx<Company?>(null);
-  final selectedVehicleType = Rx<String?>(null);
-  final selectedInsuranceType = Rx<String?>(null);
-  final selectedCondition = Rx<String?>(null);
-  final selectedStatus = Rx<String?>(null);
-  final selectedCities = <String>[].obs;
-  final selectedFuelStation = Rx<String?>(null);
+  final selectedCompanyCreate = Rx<Company?>(null);
+  final selectedVehicleTypeCreate = Rx<StatusMaster?>(null);
+  final selectedInsuranceTypeCreate = Rx<String?>(null);
+  final selectedConditionCreate = Rx<StatusMaster?>(null);
+  final selectedStatusCreate = Rx<StatusMaster?>(null);
+  final selectedCitiesCreate = <City>[].obs;
+  final selectedFuelStationCreate = Rx<FuelStation?>(null);
 
   // Tyre list for new vehicle
   final tyresList = <Tyre>[].obs;
+  // Tyre filter/view state
+  final showActiveTyresOnly = false.obs;
+  final tyreListView = false.obs; // false = grid, true = compact list
 
-  final List<String> insuranceTypes = ['Comprehensive', 'Third Party', 'None'];
-  final List<String> vehicleConditions = ['Excellent', 'Good', 'Fair', 'Poor'];
-  final List<String> vehicleStatuses = [
-    'Active',
-    'Inactive',
-    'Under Maintenance',
-    'Sold'
-  ];
-  final List<String> permittedAreas = [
-    'Dubai',
-    'Abu Dhabi',
-    'Sharjah',
-    'Ajman',
-    'Fujairah',
-    'Ras Al Khaimah',
-    'Umm Al Quwain'
-  ];
-  final List<String> fuelStations = [
-    'ADNOC',
-    'ENOC',
-    'EMARAT',
-    'Caltex',
-    'Other'
-  ];
+  void toggleTyreViewMode() => tyreListView.value = !tyreListView.value;
+  int get activeTyreCount =>
+      vehicleData.value?.tyres?.where((t) => t.status == 'Active').length ?? 0;
 
-  final vehicleTypes = ['Del Van', 'Pickup', 'Car', 'Staff Bus'];
-
-  // Constants
-  final int maxTyresAllowed = 6;
+  int maxTyresAllowed = 8;
+  int tyresAllowedleft = 0;
 
   // Form step tracking
   final currentStep = 0.obs;
@@ -142,7 +124,6 @@ class AddEditVehicleController extends GetxController
   @override
   void onInit() {
     companyService.registerController(this);
-    loadDocumentTypes();
     initializeSuggestions();
     super.onInit();
   }
@@ -190,8 +171,11 @@ class AddEditVehicleController extends GetxController
   }
 
   @override
-  void onCompanyChanged(Company newCompany) {
-    loadDocumentTypes();
+  Future<void> onCompanyChanged(Company newCompany) async {
+    clearSearch();
+    clearAllTyreControllers();
+    resetFormState();
+    initializeSuggestions();
   }
 
 // Get or create a controller for a specific tyre field
@@ -227,7 +211,12 @@ class AddEditVehicleController extends GetxController
   }
 
   void onPlateChanged(String? letter, String? emirate, String? number) {
-    plateNumberController.text = "$letter-$number";
+    // sometimes letter will be null, that time set only number without -
+    if (letter == null) {
+      plateNumberController.text = '$number';
+    } else {
+      plateNumberController.text = '$letter-$number';
+    }
     log(plateNumberController.text);
   }
 
@@ -255,9 +244,15 @@ class AddEditVehicleController extends GetxController
             Vehicle foundVehicle = vehicles.first;
             // update changables
             currentOdoController.text = foundVehicle.initialOdo.toString();
-            selectedCondition.value = foundVehicle.condition;
-            selectedFuelStation.value = foundVehicle.fuelStation;
-            selectedStatus.value = foundVehicle.status;
+            selectedConditionCreate.value = genCon.vehicleConditionMasters
+                .firstWhereOrNull(
+                    (condition) => foundVehicle.condition == condition.status);
+            selectedFuelStationCreate.value = genCon.availableFuelStations
+                .firstWhereOrNull((station) =>
+                    foundVehicle.fuelStationId == station.fuelStationId);
+            selectedStatusCreate.value = genCon.vehicleStatusMasters
+                .firstWhereOrNull(
+                    (status) => foundVehicle.status == status.status);
             descriptionController.text = foundVehicle.description.toString();
             update();
 
@@ -269,6 +264,7 @@ class AddEditVehicleController extends GetxController
 
             // Update the vehicle data with the augmented vehicle
             vehicleData.value = foundVehicle;
+            log(vehicleData.value.toString());
           } else {
             showCreateVehicleDialog();
           }
@@ -312,6 +308,19 @@ class AddEditVehicleController extends GetxController
     }
   }
 
+  // Computed getter for filtered tyres
+  List<Tyre> get filteredTyres {
+    final tyres = vehicleData.value?.tyres ?? [];
+    if (showActiveTyresOnly.value) {
+      return tyres.where((t) => t.status == 'Active').toList();
+    }
+    return tyres;
+  }
+
+  void toggleTyreFilter() {
+    showActiveTyresOnly.value = !showActiveTyresOnly.value;
+  }
+
 // Updated helper function to fetch and attach tyres for a single vehicle
   Future<void> fetchAndAttachTyresForVehicle(Vehicle vehicle) async {
     try {
@@ -320,14 +329,22 @@ class AddEditVehicleController extends GetxController
       if (vehicleNo == null) return;
 
       // Fetch tyres for this specific vehicle
-      var result =
-          await VehiclesRepo().getAllVehicleTyres(vehicleNumber: vehicleNo);
+      var result = await VehiclesRepo().getAllVehicleTyres(
+          company: companyService.selectedCompanyObs.value!.id!,
+          vehicleNumber: vehicleNo);
 
       result.fold((error) {
         log('Error fetching vehicle tyres: $error');
       }, (tyres) {
+        log(tyres.toString());
         // Attach tyres directly to the vehicle
         vehicle.tyres = tyres;
+        // get the number active tyres.
+        // only 6 active tyre are allowed. in active tyres can be n number.
+        // so calculate maxtyres allowed based on active tyres.
+        tyresAllowedleft = maxTyresAllowed -
+            tyres.where((tyre) => tyre.status == 'Active').length;
+        update();
       });
     } catch (e) {
       log('Exception in fetchAndAttachTyresForVehicle: ${e.toString()}');
@@ -335,11 +352,13 @@ class AddEditVehicleController extends GetxController
   }
 
   // Update vehicle status
-  void updateVehicleStatus(String? status) {
+  void updateVehicleStatus(StatusMaster? status) {
+    selectedStatusCreate.value = status;
     if (vehicleData.value != null) {
-      final updatedVehicle = vehicleData.value!.copyWith(status: status);
-      vehicleData.value = updatedVehicle;
-      selectedStatus.value = status;
+      vehicleData.value = vehicleData.value!.copyWith(
+        vehicleStatusId: status?.statusId,
+        status: status?.status,
+      );
     }
   }
 
@@ -361,98 +380,103 @@ class AddEditVehicleController extends GetxController
     }
   }
 
-  void updateVehicleCity(List<String> cities) {
+  void updateVehicleCity(List<City> cities) {
+    selectedCitiesCreate.value = cities;
     if (vehicleData.value != null) {
-      final updatedVehicle = vehicleData.value!.copyWith(city: cities);
+      final updatedVehicle = vehicleData.value!.copyWith(
+        cityIds: cities.map((c) => c.cityId).whereType<int>().toList(),
+        cities: cities,
+      );
       vehicleData.value = updatedVehicle;
     }
   }
 
-// Update vehicle condition (assuming this is stored somewhere in your model or via custom attribute)
-  void updateVehicleCondition(String? condition) {
-    selectedCondition.value = condition;
+  void updateVehicleCondition(StatusMaster? condition) {
+    selectedConditionCreate.value = condition;
     if (vehicleData.value != null) {
-      final updatedVehicle = vehicleData.value!.copyWith(condition: condition);
-      vehicleData.value = updatedVehicle;
+      vehicleData.value = vehicleData.value!.copyWith(
+        conditionId: condition?.statusId,
+        condition: condition?.status,
+      );
     }
   }
 
-// Update fuel station preference (assuming this is stored somewhere in your model or via custom attribute)
-  void updateFuelStation(String? fuelStation) {
-    selectedFuelStation.value = fuelStation;
+  void updateFuelStation(FuelStation? fuelStation) {
+    selectedFuelStationCreate.value = fuelStation;
     if (vehicleData.value != null) {
-      final updatedVehicle =
-          vehicleData.value!.copyWith(fuelStation: fuelStation);
-      vehicleData.value = updatedVehicle;
+      vehicleData.value = vehicleData.value!.copyWith(
+        fuelStationId: fuelStation?.fuelStationId,
+        fuelStation: fuelStation?.fuelStation,
+      );
     }
   }
 
-  // Helper method to get currently selected areas from vehicle data
-  List<String> getSelectedPermittedAreas() {
-    // If we have values in the controller's observable, use those
-    if (selectedPermittedAreas.isNotEmpty) {
-      return selectedPermittedAreas;
+  // Helper method to get currently selected City objects from vehicle data.
+  // Priority: user-edited selection → resolved cities → resolve from cityIds.
+  List<City> getSelectedCities() {
+    if (selectedCitiesCreate.isNotEmpty) {
+      return selectedCitiesCreate;
     }
-
-    // Otherwise, try to parse from the vehicle's city field
-    if (vehicleData.value != null &&
-        vehicleData.value!.city != null &&
-        vehicleData.value!.city!.isNotEmpty) {
-      // Split by delimiter if using the joined string approach
-      return vehicleData.value!.city!;
+    if (vehicleData.value?.cities != null &&
+        vehicleData.value!.cities!.isNotEmpty) {
+      return vehicleData.value!.cities!;
     }
-
-    // Default to empty list
+    // Fall back: resolve from cityIds against the master city list.
+    final ids = vehicleData.value?.cityIds;
+    if (ids != null && ids.isNotEmpty) {
+      final genCon = Get.find<GeneralMastersController>();
+      return genCon.companyCity.where((c) => ids.contains(c.cityId)).toList();
+    }
     return [];
   }
 
-  void addNewTyre() {
+  /// Adds a blank new tyre to the list and returns its index,
+  /// or -1 if the cap is already reached.
+  int addNewTyre() {
     final currentTyres = vehicleData.value?.tyres?.toList() ?? [];
 
-    // Only add if below the maximum
-    if (currentTyres.length < maxTyresAllowed) {
-      // Create a new tyre with basic properties
-      // Use vehicle number from the current vehicle if available
-      Tyre newTyre = Tyre(
-        vehicleNo: vehicleData.value?.vehicleNo,
-        position: _getNextTyrePosition(currentTyres),
-        brand: '',
-        size: '',
-        kmUsed: 0,
-        installDt: DateTime.now(),
-        createdDt: DateTime.now(),
-      );
+    if (activeTyreCount >= maxTyresAllowed) return -1;
 
-      currentTyres.add(newTyre);
+    Tyre newTyre = Tyre(
+      company: companyService.selectedCompanyObs.value!.id!,
+      tyreId: 0,
+      vehicleNo: vehicleData.value!.vehicleNo!,
+      position: _getNextTyrePosition(currentTyres),
+      brand: '',
+      size: '',
+      kmUsed: 0,
+      installDt: null,
+      createdDt: DateTime.now(),
+      deleteAllowed: true,
+      status: 'Active',
+      remarks: '',
+      expDt: null,
+    );
 
-      // Update the vehicle data
-      final updatedVehicle = vehicleData.value?.copyWith(tyres: currentTyres);
-      vehicleData.value = updatedVehicle;
-    }
+    currentTyres.add(newTyre);
+    update();
+    log(currentTyres.toString());
+
+    final updatedVehicle = vehicleData.value?.copyWith(tyres: currentTyres);
+    vehicleData.value = updatedVehicle;
+
+    return currentTyres.length - 1;
   }
 
-// Helper method to determine the next tyre position
-  String _getNextTyrePosition(List<Tyre> tyres) {
-    final positions = [
-      'Front Left',
-      'Front Right',
-      'Rear Left',
-      'Rear Right',
-      'Spare'
-    ]; // Removed 'Other' from this list
+// Helper method to determine the next tyre position from the master list.
+  // Always returns a non-null position: first tries a free slot, then falls
+  // back to the first master entry so position is never null.
+  StatusMaster? _getNextTyrePosition(List<Tyre> tyres) {
+    final masterPositions = genCon.tirePositionMaster;
+    if (masterPositions.isEmpty) return null;
 
-    // Find positions that are already taken
-    final takenPositions = tyres.map((t) => t.position).toList();
+    final takenIds =
+        tyres.map((t) => t.position?.statusId).whereType<int>().toSet();
 
-    // Find the first position that's not taken
-    for (String position in positions) {
-      if (!takenPositions.contains(position)) {
-        return position;
-      }
-    }
-
-    // If all standard positions are taken, return 'Other'
-    return 'Other';
+    return masterPositions.firstWhereOrNull(
+          (p) => p.statusId != null && !takenIds.contains(p.statusId),
+        ) ??
+        masterPositions.last;
   }
 
   void removeTyre(int index) {
@@ -511,13 +535,23 @@ class AddEditVehicleController extends GetxController
     }
   }
 
-  void updateTyrePosition(int index, String position) {
+  void updateTyrePosition(int index, StatusMaster? position) {
     final currentTyres = vehicleData.value?.tyres?.toList() ?? [];
     if (index >= 0 && index < currentTyres.length) {
-      // Update tyre with new position
       currentTyres[index] = currentTyres[index].copyWith(position: position);
+      final updatedVehicle = vehicleData.value?.copyWith(tyres: currentTyres);
+      vehicleData.value = updatedVehicle;
+    }
+  }
 
-      // Update the vehicle data
+  void updateTyreStatus(int index, String status) {
+    final currentTyres = vehicleData.value?.tyres?.toList() ?? [];
+
+    if (index >= 0 && index < currentTyres.length) {
+      currentTyres[index] = currentTyres[index].copyWith(status: status);
+      tyresAllowedleft = maxTyresAllowed -
+          currentTyres.where((tyre) => tyre.status == 'Active').length;
+
       final updatedVehicle = vehicleData.value?.copyWith(tyres: currentTyres);
       vehicleData.value = updatedVehicle;
     }
@@ -696,42 +730,11 @@ class AddEditVehicleController extends GetxController
 
   void clearSearch() {
     plateNumberController.clear();
-    // vehicleFound.value = false;
     vehicleData.value = null;
   }
 
-  // Load document types from API
-  void loadDocumentTypes() async {
-    try {
-      // Replace with your API call
-      final response = await VehiclesRepo().getAllVehicleDocumentMaster(
-          company: '${companyService.selectedCompanyObs.value?.id}');
-
-      response.fold((error) {
-        log(error);
-      }, (docs) {
-        availableDocumentTypes.value = docs;
-        log(availableDocumentTypes.toString());
-      });
-    } catch (e) {
-      log('Error loading document types: $e');
-    }
-  }
-
-// Get document type description for display
-  String? getDocumentTypeDescription(int? docTypeId) {
-    if (docTypeId == null) return null;
-
-    final docType = availableDocumentTypes.firstWhere(
-      (doc) => doc.docType == docTypeId,
-      orElse: () => DocumentType(),
-    );
-
-    return docType.docDescription;
-  }
-
 // Add a new document to the list
-  void addDocumentCreate(DocumentType docType) {
+  void addDocumentCreate(DocumentMaster docType) {
     // Create a new vehicle document from the document type
     final newDoc = VehicleDocument(
       company:
@@ -760,6 +763,7 @@ class AddEditVehicleController extends GetxController
     createDocumentIssueAuthorityControllers.add(TextEditingController());
     createDocumentTypesControllers.add(TextEditingController());
     createDocumentRemarksControllers.add(TextEditingController());
+    createDocumentAmountControllers.add(TextEditingController());
   }
 
 // Remove document and associated controllers
@@ -770,10 +774,12 @@ class AddEditVehicleController extends GetxController
     createDocumentIssueDateControllers[index].dispose();
     documentExpiryControllers[index].dispose();
     createDocumentIssueAuthorityControllers[index].dispose();
+    createDocumentAmountControllers[index].dispose();
 
     createDocumentIssueDateControllers.removeAt(index);
     documentExpiryControllers.removeAt(index);
     createDocumentIssueAuthorityControllers.removeAt(index);
+    createDocumentAmountControllers.removeAt(index);
   }
 
 // Update document type
@@ -794,14 +800,6 @@ class AddEditVehicleController extends GetxController
     );
   }
 
-  void updateDocumentType(int index, String documentType) {
-    final currentDoc = vehicleDocuments[index];
-
-    vehicleDocuments[index] = currentDoc.copyWith(
-      documentType: documentType,
-    );
-  }
-
 // Update document city
   void updateDocumentCity(int index, String? city) {
     if (city == null) return;
@@ -818,6 +816,14 @@ class AddEditVehicleController extends GetxController
 
     vehicleDocuments[index] = currentDoc.copyWith(
       remarks: remarks,
+    );
+  }
+
+  void updateDocumentAmount(int index, String amountText) {
+    final currentDoc = vehicleDocuments[index];
+    final amount = double.tryParse(amountText);
+    vehicleDocuments[index] = currentDoc.copyWith(
+      amount: amount,
     );
   }
 
@@ -877,10 +883,14 @@ class AddEditVehicleController extends GetxController
     for (var controller in createDocumentIssueAuthorityControllers) {
       controller.dispose();
     }
+    for (var controller in createDocumentAmountControllers) {
+      controller.dispose();
+    }
 
     createDocumentIssueDateControllers.clear();
     documentExpiryControllers.clear();
     createDocumentIssueAuthorityControllers.clear();
+    createDocumentAmountControllers.clear();
 
     // Create controllers for each document
     for (var doc in vehicleDocuments) {
@@ -895,33 +905,48 @@ class AddEditVehicleController extends GetxController
       createDocumentIssueAuthorityControllers.add(TextEditingController(
         text: doc.issueAuthority ?? '',
       ));
+
+      createDocumentAmountControllers.add(TextEditingController(
+        text: doc.amount != null ? doc.amount.toString() : '',
+      ));
     }
   }
 
 // Check if a document type is already added
-  bool isDocumentTypeAlreadyAdded(DocumentType docType) {
+  bool isDocumentTypeAlreadyAdded(DocumentMaster docType) {
     return vehicleDocuments.any((doc) => doc.docType == docType.docType);
   }
 
-  void createAddNewTyre() {
-    if (tyresList.length < maxTyresAllowed) {
-      // Create the new tyre
-      final newTyre = Tyre(
-        vehicleNo: createPlateNumberController.text,
-        installDt: DateTime.now(),
-        createdDt: DateTime.now(),
-        kmUsed: 0,
-      );
-      tyresList.add(newTyre);
+  /// Adds a new blank tyre to tyresList and returns its index, or -1 if cap reached.
+  int createAddNewTyre() {
+    if (tyresList.length >= maxTyresAllowed) return -1;
 
-      // Create controllers for the new tyre
-      tyreBrandControllers.add(TextEditingController());
-      tyreSizeControllers.add(TextEditingController());
-      tyreKmControllers.add(TextEditingController(text: "0"));
-      tyreRemarksControllers.add(TextEditingController());
-      tyreInstallDateControllers.add(TextEditingController(
-          text: DateFormat('yyyy-MM-dd').format(DateTime.now())));
-    }
+    final nextPosition = _getNextTyrePosition(tyresList.toList());
+    final newTyre = Tyre(
+      company: companyService.selectedCompanyObs.value!.id!,
+      tyreId: 0,
+      vehicleNo: createPlateNumberController.text,
+      position: nextPosition,
+      brand: '',
+      size: '',
+      kmUsed: 0,
+      installDt: null,
+      createdDt: DateTime.now(),
+      deleteAllowed: true,
+      status: 'Active',
+      remarks: '',
+      expDt: null,
+    );
+    tyresList.add(newTyre);
+
+    // Keep legacy per-field controllers in sync (used by createRemoveTyre disposal)
+    tyreBrandControllers.add(TextEditingController());
+    tyreSizeControllers.add(TextEditingController());
+    tyreKmControllers.add(TextEditingController(text: "0"));
+    tyreRemarksControllers.add(TextEditingController());
+    tyreInstallDateControllers.add(TextEditingController());
+
+    return tyresList.length - 1;
   }
 
   void createRemoveTyre(int index) {
@@ -958,7 +983,7 @@ class AddEditVehicleController extends GetxController
     }
   }
 
-  void createUpdateTyrePosition(int index, String position) {
+  void createUpdateTyrePosition(int index, StatusMaster? position) {
     if (index >= 0 && index < tyresList.length) {
       final updatedTyre = tyresList[index].copyWith(position: position);
       tyresList[index] = updatedTyre;
@@ -986,6 +1011,18 @@ class AddEditVehicleController extends GetxController
     if (index >= 0 && index < tyresList.length) {
       final updatedTyre = tyresList[index].copyWith(installDt: date);
       tyresList[index] = updatedTyre;
+    }
+  }
+
+  void createUpdateTyreExpiryDate(int index, DateTime date) {
+    if (index >= 0 && index < tyresList.length) {
+      tyresList[index] = tyresList[index].copyWith(expDt: date);
+    }
+  }
+
+  void createUpdateTyreStatus(int index, String status) {
+    if (index >= 0 && index < tyresList.length) {
+      tyresList[index] = tyresList[index].copyWith(status: status);
     }
   }
 
@@ -1112,54 +1149,56 @@ class AddEditVehicleController extends GetxController
     fuelStationController.clear();
     insuranceExpiryController.clear();
     mulkiyaExpiryController.clear();
-    selectedCompany.value = null;
-    selectedVehicleType.value = null;
+    selectedCompanyCreate.value = null;
+    selectedVehicleTypeCreate.value = null;
     createDescriptionController.clear();
 
     // Reset dropdown values
-    selectedInsuranceType.value = null;
-    selectedCondition.value = null;
-    selectedStatus.value = 'Active'; // Default to Active
-    selectedCities.clear();
-    selectedFuelStation.value = null;
+    selectedInsuranceTypeCreate.value = null;
+    selectedConditionCreate.value = null;
+    selectedStatusCreate.value = null;
+    selectedCitiesCreate.clear();
+    selectedFuelStationCreate.value = null;
 
     // Reset step and tyres
     currentStep.value = 0;
     vehicleImages.clear();
     tyresList.clear();
+    // reste documenmts
+    vehicleDocuments.clear();
   }
 
-  Future<void> createUpdateVehicle(Vehicle newVehicle) async {
+  Future<void> createUpdateVehicle(
+      {required Vehicle newVehicle, required bool isNew}) async {
     try {
       // Log the vehicle data for debugging
-      log('Attempting to create/update vehicle: ${newVehicle.toString()}');
+
+      log('Attempting to ${isNew ? 'Creating' : 'Updating'} vehicle: ${newVehicle.toString()}');
 
       // Start the loading indicator
       loadingCon.startLoading();
 
       // Call the repository method
       final res = await VehiclesRepo().createUpdateVehicle(newVehicle);
-      log('API response: $res');
 
-      // Handle the result
-      if (res) {
+      res.fold((error) {
+        // Failure case with valid response
+        CustomWidget.customSnackBar(
+          isError: true,
+          title: 'Failed',
+          message: error ??
+              'Vehicle creation failed. Please verify the information and try again.',
+        );
+      }, (success) async {
         // Success case
         Get.back(); // Navigate back
         CustomWidget.customSnackBar(
           isError: false,
           title: 'Success',
-          message: 'Vehicle created successfully',
+          message: 'Vehicle ${isNew ? "Created" : "Updated"} successfully',
         );
         await searchVehicle();
-      } else {
-        // Failure case with valid response
-        CustomWidget.customSnackBar(
-          isError: true,
-          title: 'Failed',
-          message:
-              'Vehicle creation failed. Please verify the information and try again.',
-        );
-      }
+      });
     } catch (e, stackTrace) {
       // Handle exceptions
       log('Exception during vehicle creation: $e');
@@ -1179,17 +1218,17 @@ class AddEditVehicleController extends GetxController
 
   ////////// Debug
 
-// Add this function to your AddEditVehicleController class
+// function to populate test data
   void populateTestData() {
     // Basic Information Step
     if (companyService.companyList.isNotEmpty) {
-      selectedCompany.value = companyService.selectedCompanyObs.value;
+      selectedCompanyCreate.value = companyService.selectedCompanyObs.value;
     }
-    createPlateNumberController.text = "D-25502";
+    createPlateNumberController.text = createPlateNumberController.text;
     createBrandController.text = "Toyota";
     createModelController.text = "Land Cruiser";
-    if (vehicleTypes.isNotEmpty) {
-      selectedVehicleType.value = vehicleTypes.first;
+    if (genCon.vehicleTypeMasters.isNotEmpty) {
+      selectedVehicleTypeCreate.value = genCon.vehicleTypeMasters.first;
     }
     yearController.text = "2023";
     createDescriptionController.text = "Test vehicle for demo purposes";
@@ -1200,28 +1239,28 @@ class AddEditVehicleController extends GetxController
     initialOdoController.text = "5000";
     currentOdoController.text = "7500";
 
-    // Set some test permitted areas
-    if (permittedAreas.isNotEmpty) {
-      selectedCities.value = permittedAreas.take(2).toList();
+    // Set some test permitted areas (use actual City objects from masters)
+    if (genCon.companyCity.isNotEmpty) {
+      selectedCitiesCreate.value = genCon.companyCity.take(2).toList();
     }
 
     // Set fuel station if available
-    if (fuelStations.isNotEmpty) {
-      selectedFuelStation.value = fuelStations.first;
+    if (genCon.availableFuelStations.isNotEmpty) {
+      selectedFuelStationCreate.value = genCon.availableFuelStations.first;
     }
 
     // Status & Documents Step
-    if (vehicleConditions.isNotEmpty) {
-      selectedCondition.value = vehicleConditions.first;
+    if (genCon.vehicleConditionMasters.isNotEmpty) {
+      selectedConditionCreate.value = genCon.vehicleConditionMasters.first;
     }
-    if (vehicleStatuses.isNotEmpty) {
-      selectedStatus.value = vehicleStatuses.first;
+    if (genCon.vehicleStatusMasters.isNotEmpty) {
+      selectedStatusCreate.value = genCon.vehicleStatusMasters.first;
     }
 
     // Add test documents if document types are available
-    if (availableDocumentTypes.isNotEmpty) {
+    if (genCon.companyDocumentTypes.isNotEmpty) {
       // Add first document type
-      final firstDocType = availableDocumentTypes[0];
+      final firstDocType = genCon.companyDocumentTypes[0];
       addDocumentCreate(firstDocType);
 
       // Set values for the first document
@@ -1239,13 +1278,13 @@ class AddEditVehicleController extends GetxController
         createDocumentIssueAuthorityControllers[0].text = "Dubai RTA";
       }
 
-      if (vehicleDocuments.isNotEmpty && permittedAreas.isNotEmpty) {
-        updateDocumentCity(0, permittedAreas[0]);
+      if (vehicleDocuments.isNotEmpty && genCon.companyCity.isNotEmpty) {
+        updateDocumentCity(0, genCon.companyCity.first.city ?? '');
       }
 
       // Add second document type if available
-      if (availableDocumentTypes.length > 1) {
-        final secondDocType = availableDocumentTypes[1];
+      if (genCon.companyDocumentTypes.length > 1) {
+        final secondDocType = genCon.companyDocumentTypes[1];
         addDocumentCreate(secondDocType);
 
         // Set values for the second document
@@ -1264,8 +1303,8 @@ class AddEditVehicleController extends GetxController
               "Insurance Authority";
         }
 
-        if (vehicleDocuments.length > 1 && permittedAreas.length > 1) {
-          updateDocumentCity(1, permittedAreas[1]);
+        if (vehicleDocuments.length > 1 && genCon.companyCity.length > 1) {
+          updateDocumentCity(1, genCon.companyCity[1].city ?? '');
         }
       }
     }
@@ -1289,8 +1328,12 @@ class AddEditVehicleController extends GetxController
       tyreRemarksControllers[0].text = "Front left tyre in good condition";
       createUpdateTyreRemarks(0, "Front left tyre in good condition");
     }
+    // Helper: find a position master by name prefix
+    StatusMaster? posByName(String name) => genCon.tirePositionMaster
+        .firstWhereOrNull((p) => p.status?.contains(name) == true);
+
     if (tyresList.isNotEmpty) {
-      createUpdateTyrePosition(0, "Front Left");
+      createUpdateTyrePosition(0, posByName('Front Left'));
       createUpdateTyreInstallDate(
           0, DateTime.now().subtract(Duration(days: 60)));
     }
@@ -1314,7 +1357,7 @@ class AddEditVehicleController extends GetxController
       createUpdateTyreRemarks(1, "Front right tyre replaced recently");
     }
     if (tyresList.length > 1) {
-      createUpdateTyrePosition(1, "Front Right");
+      createUpdateTyrePosition(1, posByName('Front Right'));
       createUpdateTyreInstallDate(
           1, DateTime.now().subtract(Duration(days: 30)));
     }
@@ -1338,7 +1381,7 @@ class AddEditVehicleController extends GetxController
       createUpdateTyreRemarks(2, "Rear left tyre needs replacement soon");
     }
     if (tyresList.length > 2) {
-      createUpdateTyrePosition(2, "Rear Left");
+      createUpdateTyrePosition(2, posByName('Rear Left'));
       createUpdateTyreInstallDate(
           2, DateTime.now().subtract(Duration(days: 120)));
     }
@@ -1362,7 +1405,7 @@ class AddEditVehicleController extends GetxController
       createUpdateTyreRemarks(3, "Rear right tyre in good condition");
     }
     if (tyresList.length > 3) {
-      createUpdateTyrePosition(3, "Rear Right");
+      createUpdateTyrePosition(3, posByName('Rear Right'));
       createUpdateTyreInstallDate(
           3, DateTime.now().subtract(Duration(days: 90)));
     }

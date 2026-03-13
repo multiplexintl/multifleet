@@ -1,530 +1,1182 @@
-import 'dart:convert';
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:multifleet/models/doc_type.dart';
+import 'package:multifleet/controllers/general_masters.dart';
+import 'package:multifleet/models/city/city.dart';
+import 'package:multifleet/models/doc_master.dart';
+import 'package:multifleet/models/fuel_station/fuel_station.dart';
+import 'package:multifleet/models/status_master/status_master.dart';
+import 'package:multifleet/models/tyre.dart';
 import 'package:multifleet/widgets/search_vehicle.dart';
 
 import '../controllers/add_edit_vehicle_controller.dart';
+import '../models/vehicle.dart';
 import '../models/vehicle_docs.dart';
+import '../theme/app_theme.dart';
 import '../widgets/custom_widgets.dart';
 import '../widgets/multi_select_drop.dart';
 
-// Main StatelessWidget Page
+/// ============================================================
+/// EDIT VEHICLE PAGE
+/// ============================================================
+/// A full-page view for searching and editing vehicle details.
+/// Features:
+/// - Search by license plate with multi-vehicle selection
+/// - Permanent details (read-only)
+/// - Changeable details (editable)
+/// - Documents management with DataTable/Card responsive view
+/// - Tyres management with responsive grid
+/// ============================================================
+
 class AddEditVehiclePage extends StatelessWidget {
   const AddEditVehiclePage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Initialize the controller
     final controller = Get.put(AddEditVehicleController());
 
     return Scaffold(
+      backgroundColor: AppColors.surface,
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Search Section
-                _buildSearchSection(controller),
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Search Section
+              SearchVehicleWidget(
+                heading: "Search Vehicle",
+                controller: controller.plateNumberController,
+                onSearch: () => _handleSearch(controller),
+                onClear: () => controller.clearSearch(),
+                onDataChanged: (plate) {
+                  controller.onPlateChanged(
+                      plate.code, plate.region, plate.number);
+                },
+              ),
 
-                const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
 
-                // Vehicle Details Section (if found)
-                Obx(() => controller.isSearching.value
-                    ? Center(
-                        child: Text("Searching..."),
-                      )
-                    : controller.vehicleData.value != null
-                        ? _buildVehicleDetailsSection(controller)
-                        : Center(child: Text("Search Any Vehicle"))),
-              ],
-            ),
+              // Vehicle Details Section (conditional)
+              Obx(() {
+                if (controller.isSearching.value) {
+                  return _buildLoadingState();
+                } else if (controller.vehicleData.value != null) {
+                  return _buildVehicleDetailsSection(controller);
+                } else {
+                  return _buildEmptyState();
+                }
+              }),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildSearchSection(AddEditVehicleController controller) {
-    return SearchVehicleWidget(
-      controller: controller.plateNumberController,
-      onSearch: () => controller.searchVehicle(),
-      onClear: () => controller.clearSearch(),
-      onDataChanged: (letter, emirate, number) {
-        controller.onPlateChanged(letter, emirate, number);
-      },
+  // ============================================================
+  // STATES
+  // ============================================================
+
+  Widget _buildLoadingState() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xxxl),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: AppRadius.borderLg,
+        boxShadow: AppShadows.sm,
+      ),
+      child: Column(
+        children: [
+          CircularProgressIndicator(color: AppColors.accent),
+          const SizedBox(height: AppSpacing.lg),
+          Text('Searching...', style: AppTextStyles.body),
+        ],
+      ),
     );
   }
+
+  Widget _buildEmptyState() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xxxl),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: AppRadius.borderLg,
+        boxShadow: AppShadows.sm,
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.directions_car_outlined,
+              size: 48,
+              color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Search for a Vehicle',
+            style: AppTextStyles.h4.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Enter the license plate number above to find and edit a vehicle',
+            style: AppTextStyles.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // SEARCH HANDLER
+  // ============================================================
+
+  void _handleSearch(AddEditVehicleController controller) async {
+    log(controller.plateNumberController.text);
+
+    if (controller.plateNumberController.text.contains('null')) {
+      CustomWidget.customSnackBar(
+          title: 'Error',
+          message: 'Please enter a plate number',
+          isError: true);
+      return;
+    }
+
+    controller.searchVehicle();
+  }
+
+  /// Show dialog when multiple vehicles are found
+  void _showVehicleSelectionDialog(
+    AddEditVehicleController controller,
+    List<Vehicle> vehicles,
+  ) {
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
+        child: Container(
+          width: 500,
+          constraints: const BoxConstraints(maxHeight: 500),
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.format_list_bulleted_outlined,
+                  color: AppColors.info,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text('Multiple Vehicles Found', style: AppTextStyles.h4),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Select the vehicle you want to edit',
+                style: AppTextStyles.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Divider(color: AppColors.divider),
+
+              // Vehicle list
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: vehicles.length,
+                  separatorBuilder: (_, __) => Divider(
+                    color: AppColors.divider,
+                    height: 1,
+                  ),
+                  itemBuilder: (context, index) {
+                    final vehicle = vehicles[index];
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.sm,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: AppRadius.borderMd,
+                      ),
+                      leading: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withOpacity(0.1),
+                          borderRadius: AppRadius.borderMd,
+                        ),
+                        child: Icon(
+                          Icons.directions_car_outlined,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                      title: Text(
+                        vehicle.vehicleNo ?? 'Unknown',
+                        style: AppTextStyles.label,
+                      ),
+                      subtitle: Text(
+                        '${vehicle.brand ?? ''} ${vehicle.model ?? ''}'.trim(),
+                        style: AppTextStyles.bodySmall,
+                      ),
+                      trailing: Icon(
+                        Icons.chevron_right,
+                        color: AppColors.textMuted,
+                      ),
+                      onTap: () {
+                        Get.back();
+                        controller.vehicleData.value = vehicle;
+                      },
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.lg),
+              // Cancel button
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Get.back(),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: BorderSide(color: AppColors.divider),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppRadius.borderMd,
+                    ),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // VEHICLE DETAILS SECTION
+  // ============================================================
 
   Widget _buildVehicleDetailsSection(AddEditVehicleController controller) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: AppRadius.borderLg,
+        boxShadow: AppShadows.sm,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Permanent Details Section
-            _buildSectionHeader('Permanent Vehicle Details'),
-            _buildPermanentDetailsSection(controller),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Vehicle header
+          _buildVehicleHeader(controller),
 
-            const Divider(height: 32),
-
-            // Changeable Details Section
-            _buildSectionHeader('Changeable Vehicle Details'),
-            _buildChangeableDetailsSection(controller),
-
-            const Divider(height: 32),
-
-            // Tyres Section
-            _buildSectionHeader('Tyre Details'),
-            _buildTyresSection(controller),
-
-            const SizedBox(height: 50),
-
-            // Action Buttons
-            _buildActionButtons(
-              onPressedSave: () {
-                log(json.encode(controller.vehicleData));
-              },
-              onPressedCancel: () {},
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.blue[800],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPermanentDetailsSection(AddEditVehicleController controller) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        int crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
-
-        return Obx(() => GridView.count(
-              crossAxisCount: crossAxisCount,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 9.5,
-              mainAxisSpacing: 20,
-              crossAxisSpacing: 25,
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildReadOnlyField(
-                    'Plate Number', controller.vehicleData.value!.vehicleNo),
-                _buildReadOnlyField(
-                    'Brand', controller.vehicleData.value!.brand),
-                _buildReadOnlyField(
-                    'Model', controller.vehicleData.value!.model),
-                _buildReadOnlyField('Type', controller.vehicleData.value!.type),
-                _buildReadOnlyField(
-                    'Chassis Number', controller.vehicleData.value!.chassisNo),
-                _buildReadOnlyField('Traffic File Number',
-                    controller.vehicleData.value!.traficFileNo),
-                _buildReadOnlyField(
-                    'Company',
-                    controller.companyService.companyList
-                        .where((element) =>
-                            element.id == controller.vehicleData.value!.company)
-                        .first
-                        .name),
+                // Permanent Details Section
+                _SectionCard(
+                  icon: Icons.lock_outlined,
+                  title: 'Permanent Vehicle Details',
+                  subtitle: 'These details cannot be modified',
+                  child: _buildPermanentDetailsContent(controller),
+                ),
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // Changeable Details Section
+                _SectionCard(
+                  icon: Icons.edit_outlined,
+                  title: 'Editable Details',
+                  child: _buildChangeableDetailsContent(controller),
+                ),
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // Documents Section
+                _buildDocumentsSection(controller),
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // Tyres Section
+                _buildTyresSection(controller),
+
+                const SizedBox(height: AppSpacing.xxl),
+
+                // Action Buttons
+                _buildActionButtons(controller),
               ],
-            ));
-      },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildChangeableDetailsSection(AddEditVehicleController controller) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        int crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
+  Widget _buildVehicleHeader(AddEditVehicleController controller) {
+    final vehicle = controller.vehicleData.value!;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Basic changeable details
-            GridView.count(
-              crossAxisCount: crossAxisCount,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 9.5,
-              mainAxisSpacing: 20,
-              crossAxisSpacing: 25,
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.primaryDark,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(AppRadius.lg),
+          topRight: Radius.circular(AppRadius.lg),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: AppRadius.borderMd,
+            ),
+            child: Icon(
+              Icons.directions_car,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildTextFormField(
-                  label: 'Current KM',
-                  editingCon: controller.currentOdoController,
-                  onChanged: controller.updateCurrentOdometer,
+                Text(
+                  vehicle.vehicleNo ?? 'Unknown',
+                  style: AppTextStyles.h3.copyWith(color: Colors.white),
                 ),
-                buildMultiSelectField(
-                  label: 'Permitted Areas',
-                  options: controller.permittedAreas,
-                  initiallySelected: controller.vehicleData.value?.city ?? [],
-                  onChanged: (cities) => controller.updateVehicleCity(cities),
-                ),
-                _buildDropdownField(
-                  label: 'Vehicle Condition',
-                  options: controller.vehicleConditions,
-                  onChanged: controller.updateVehicleCondition,
-                  value: controller.selectedCondition.value,
-                ),
-                _buildDropdownField(
-                  label: 'Fuel Station',
-                  options: controller.fuelStations,
-                  onChanged: controller.updateFuelStation,
-                  value: controller.selectedFuelStation.value,
-                ),
-                _buildDropdownField(
-                  label: 'Vehicle Status',
-                  options: controller.vehicleStatuses,
-                  onChanged: controller.updateVehicleStatus,
-                  value: controller.selectedStatus.value,
-                ),
-                _buildTextFormField(
-                  label: 'Description',
-                  editingCon: controller.descriptionController,
-                  onChanged: controller.updateVehicleDescription,
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '${vehicle.brand ?? ''} ${vehicle.model ?? ''} • ${vehicle.type ?? ''}'
+                      .trim(),
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.white.withOpacity(0.7),
+                  ),
                 ),
               ],
             ),
+          ),
+          // Status badge
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.getStatusBgColor(vehicle.status),
+              borderRadius: AppRadius.borderFull,
+            ),
+            child: Text(
+              vehicle.status ?? 'Unknown',
+              style: AppTextStyles.labelSmall.copyWith(
+                color: AppColors.getStatusColor(vehicle.status),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            SizedBox(height: 30),
+  // ============================================================
+  // PERMANENT DETAILS
+  // ============================================================
 
-            // Vehicle Documents Section
-            _buildDocumentsSection(controller, constraints),
+  Widget _buildPermanentDetailsContent(AddEditVehicleController controller) {
+    final vehicle = controller.vehicleData.value!;
+
+    String companyName = 'Unknown';
+    try {
+      companyName = controller.companyService.companyList
+              .firstWhere((c) => c.id == vehicle.company)
+              .name ??
+          'Unknown';
+    } catch (_) {}
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 600;
+
+        return Wrap(
+          spacing: AppSpacing.lg,
+          runSpacing: AppSpacing.lg,
+          children: [
+            _ReadOnlyField(
+              label: 'Plate Number',
+              value: vehicle.vehicleNo ?? '-',
+              icon: Icons.confirmation_number_outlined,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _ReadOnlyField(
+              label: 'Brand',
+              value: vehicle.brand ?? '-',
+              icon: Icons.branding_watermark_outlined,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _ReadOnlyField(
+              label: 'Model',
+              value: vehicle.model ?? '-',
+              icon: Icons.model_training_outlined,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _ReadOnlyField(
+              label: 'Type',
+              value: vehicle.type ?? '-',
+              icon: Icons.category_outlined,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _ReadOnlyField(
+              label: 'Chassis Number',
+              value: vehicle.chassisNo ?? '-',
+              icon: Icons.tag_outlined,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _ReadOnlyField(
+              label: 'Traffic File Number',
+              value: vehicle.traficFileNo ?? '-',
+              icon: Icons.folder_outlined,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _ReadOnlyField(
+              label: 'Company',
+              value: companyName,
+              icon: Icons.business_outlined,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildDocumentsSection(
-      AddEditVehicleController controller, BoxConstraints constraints) {
-    // final docTypes = {
-    //   1001: 'Insurance',
-    //   1002: 'Mulkiya',
-    //   1003: 'Service',
-    //   1004: 'Registration',
-    //   1005: 'Permit',
-    //   1006: 'Other'
-    // };
+  // ============================================================
+  // CHANGEABLE DETAILS
+  // ============================================================
 
-    // Get existing documents
-    final documents = controller.vehicleData.value?.documents ?? [];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildChangeableDetailsContent(AddEditVehicleController controller) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 600;
+        var genCon = Get.find<GeneralMastersController>();
+        return Wrap(
+          spacing: AppSpacing.lg,
+          runSpacing: AppSpacing.lg,
           children: [
-            Text(
-              'Vehicle Documents',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[800],
-              ),
+            _StyledTextField(
+              label: 'Current Odometer (KM)',
+              controller: controller.currentOdoController,
+              icon: Icons.speed_outlined,
+              keyboardType: TextInputType.number,
+              onChanged: controller.updateCurrentOdometer,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
             ),
-            ElevatedButton.icon(
-              icon: Icon(Icons.add_circle_outline, color: Colors.white),
-              label: Text('Add Document'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[700],
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => _showAddDocumentDialog(controller),
+            SizedBox(
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+              child: Obx(() {
+                final selected = controller.getSelectedCities();
+                return MultiSelectDropDown<City>(
+                  key: ValueKey(
+                      controller.vehicleData.value?.vehicleNo ?? 'new'),
+                  label: 'Permitted Areas',
+                  options: genCon.companyCity.toList(),
+                  displayBuilder: (c) => c.city ?? '',
+                  initiallySelected: selected,
+                  onChanged: (cities) => controller.updateVehicleCity(cities),
+                );
+              }),
+            ),
+            _StyledDropdown<StatusMaster>(
+              label: 'Vehicle Condition',
+              value: controller.selectedConditionCreate.value,
+              items: genCon.vehicleConditionMasters,
+              icon: Icons.health_and_safety_outlined,
+              displayBuilder: (c) => c.status ?? '',
+              onChanged: controller.updateVehicleCondition,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _StyledDropdown<FuelStation>(
+              label: 'Fuel Station',
+              value: controller.selectedFuelStationCreate.value,
+              items: genCon.availableFuelStations,
+              icon: Icons.local_gas_station_outlined,
+              displayBuilder: (f) => f.fuelStation ?? '',
+              onChanged: controller.updateFuelStation,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _StyledDropdown<StatusMaster>(
+              label: 'Vehicle Status',
+              value: controller.selectedStatusCreate.value,
+              items: genCon.vehicleStatusMasters,
+              icon: Icons.toggle_on_outlined,
+              displayBuilder: (s) => s.status ?? '',
+              onChanged: controller.updateVehicleStatus,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
+            ),
+            _StyledTextField(
+              label: 'Description / Remarks',
+              controller: controller.descriptionController,
+              icon: Icons.notes_outlined,
+              onChanged: controller.updateVehicleDescription,
+              width: isWide ? (constraints.maxWidth - AppSpacing.lg) / 2 : null,
             ),
           ],
-        ),
-        SizedBox(height: 16),
-
-        // Existing documents list
-        if (documents.isEmpty)
-          Container(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            alignment: Alignment.center,
-            child: Text(
-              'No documents added yet',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          )
-        else
-          _buildDocumentsList(controller, documents, constraints),
-      ],
+        );
+      },
     );
   }
 
-  Widget _buildDocumentsList(AddEditVehicleController controller,
-      List<VehicleDocument> documents, BoxConstraints constraints) {
-    final isWideScreen = constraints.maxWidth > 700;
+  // ============================================================
+  // DOCUMENTS SECTION
+  // ============================================================
 
-    if (isWideScreen) {
-      // Table view for wide screens
-      return Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(8),
+  Widget _buildDocumentsSection(AddEditVehicleController controller) {
+    return Obx(() {
+      final documents = controller.vehicleData.value?.documents ?? [];
+
+      return _SectionCard(
+        icon: Icons.description_outlined,
+        title: 'Vehicle Documents',
+        headerExtra: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm,
+            vertical: AppSpacing.xs,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.accent.withOpacity(0.1),
+            borderRadius: AppRadius.borderFull,
+          ),
+          child: Text(
+            '${documents.length}',
+            style: AppTextStyles.labelSmall.copyWith(
+              color: AppColors.accent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
+        trailing: _SmallButton(
+          label: 'Add Document',
+          icon: Icons.add_outlined,
+          onPressed: () => _showAddDocumentDialog(controller),
+        ),
+        child: documents.isEmpty
+            ? _EmptyPlaceholder(
+                icon: Icons.description_outlined,
+                message: 'No documents added yet',
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth > 700) {
+                    return _buildDocumentsTable(controller, documents);
+                  } else {
+                    return _buildDocumentsCards(controller, documents);
+                  }
+                },
+              ),
+      );
+    });
+  }
+
+  Widget _buildDocumentsTable(
+    AddEditVehicleController controller,
+    List<VehicleDocument> documents,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.divider),
+        borderRadius: AppRadius.borderMd,
+      ),
+      child: ClipRRect(
+        borderRadius: AppRadius.borderMd,
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
-            columnSpacing: 20,
-            columns: [
+            headingRowColor: WidgetStateProperty.all(AppColors.surface),
+            dataRowMinHeight: 52,
+            dataRowMaxHeight: 60,
+            columnSpacing: 24,
+            horizontalMargin: 16,
+            headingTextStyle: AppTextStyles.labelSmall.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+            columns: const [
               DataColumn(label: Text('Type')),
               DataColumn(label: Text('Issue Date')),
               DataColumn(label: Text('Expiry Date')),
               DataColumn(label: Text('Authority')),
               DataColumn(label: Text('City')),
+              DataColumn(label: Text('Amount')),
               DataColumn(label: Text('Actions')),
             ],
             rows: documents.map((doc) {
-              final docTypeName = controller.availableDocumentTypes
-                      .where((type) => type.docType == doc.docType)
-                      .first
-                      .docDescription ??
-                  'Unknown';
+              final docTypeName = _getDocTypeName(controller, doc.docType);
+              final expiryColor = AppColors.getExpiryColor(doc.expiryDate);
 
               return DataRow(
                 cells: [
-                  DataCell(Text(docTypeName,
-                      style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataCell(Text(doc.formatDate(doc.issueDate))),
-                  DataCell(Row(
-                    children: [
-                      Text(doc.formatDate(doc.expiryDate)),
-                      SizedBox(width: 5),
-                      _buildExpiryIndicator(doc.expiryDate),
-                    ],
-                  )),
-                  DataCell(Text(doc.issueAuthority ?? '-')),
-                  DataCell(Text(doc.city ?? '-')),
-                  DataCell(Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(Icons.edit, size: 20),
-                        onPressed: () =>
-                            _showEditDocumentDialog(controller, doc),
-                        tooltip: 'Edit',
+                  DataCell(
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: AppSpacing.xs,
                       ),
-                      IconButton(
-                        icon: Icon(Icons.delete,
-                            size: 20, color: Colors.red[400]),
-                        onPressed: () =>
-                            _showDeleteDocumentConfirmation(controller, doc),
-                        tooltip: 'Delete',
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withOpacity(0.1),
+                        borderRadius: AppRadius.borderSm,
                       ),
-                    ],
+                      child: Text(
+                        docTypeName,
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  DataCell(Text(
+                    doc.formatDate(doc.issueDate),
+                    style: AppTextStyles.body,
                   )),
+                  DataCell(
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          doc.formatDate(doc.expiryDate),
+                          style: AppTextStyles.body,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: expiryColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  DataCell(Text(
+                    doc.issueAuthority ?? '-',
+                    style: AppTextStyles.body,
+                  )),
+                  DataCell(Text(
+                    doc.city ?? '-',
+                    style: AppTextStyles.body,
+                  )),
+                  DataCell(Text(
+                    doc.amount != null ? doc.amount!.toStringAsFixed(2) : '-',
+                    style: AppTextStyles.body,
+                  )),
+                  DataCell(
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: AppColors.textSecondary,
+                          ),
+                          onPressed: () =>
+                              _showEditDocumentDialog(controller, doc),
+                          tooltip: 'Edit',
+                          splashRadius: 20,
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: AppColors.error,
+                          ),
+                          onPressed: () =>
+                              _showDeleteDocumentConfirmation(controller, doc),
+                          tooltip: 'Delete',
+                          splashRadius: 20,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               );
             }).toList(),
           ),
         ),
-      );
-    } else {
-      // Card view for narrower screens
-      return ListView.separated(
-        shrinkWrap: true,
-        physics: NeverScrollableScrollPhysics(),
-        itemCount: documents.length,
-        separatorBuilder: (context, index) => SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final doc = documents[index];
-          final docTypeName = controller.availableDocumentTypes
-                  .where((type) => type.docType == doc.docType)
-                  .first
-                  .docDescription ??
-              'Unknown';
+      ),
+    );
+  }
 
-          return Card(
-            elevation: 2,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildDocumentsCards(
+    AddEditVehicleController controller,
+    List<VehicleDocument> documents,
+  ) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: documents.length,
+      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+      itemBuilder: (context, index) {
+        final doc = documents[index];
+        final docTypeName = _getDocTypeName(controller, doc.docType);
+        final expiryColor = AppColors.getExpiryColor(doc.expiryDate);
+
+        return Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppRadius.borderMd,
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row
+              Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Chip(
-                        label: Text(docTypeName),
-                        backgroundColor: _getDocumentTypeColor(doc.docType),
-                        labelStyle: TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withOpacity(0.1),
+                      borderRadius: AppRadius.borderSm,
+                    ),
+                    child: Text(
+                      docTypeName,
+                      style: AppTextStyles.labelSmall.copyWith(
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w600,
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.edit, size: 20),
-                            onPressed: () =>
-                                _showEditDocumentDialog(controller, doc),
-                            tooltip: 'Edit',
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete,
-                                size: 20, color: Colors.red[400]),
-                            onPressed: () => _showDeleteDocumentConfirmation(
-                                controller, doc),
-                            tooltip: 'Delete',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-                  _buildDocumentDetailRow(
-                      'Issue Date', doc.formatDate(doc.issueDate)),
-                  SizedBox(height: 8),
-                  _buildDocumentDetailRow(
-                    'Expiry Date',
-                    Row(
-                      children: [
-                        Text(doc.formatDate(doc.expiryDate)),
-                        SizedBox(width: 5),
-                        _buildExpiryIndicator(doc.expiryDate),
-                      ],
                     ),
                   ),
-                  SizedBox(height: 8),
-                  _buildDocumentDetailRow(
-                      'Authority', doc.issueAuthority ?? '-'),
-                  SizedBox(height: 8),
-                  _buildDocumentDetailRow('City', doc.city ?? '-'),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(
+                      Icons.edit_outlined,
+                      size: 18,
+                      color: AppColors.textSecondary,
+                    ),
+                    onPressed: () => _showEditDocumentDialog(controller, doc),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: AppColors.error,
+                    ),
+                    onPressed: () =>
+                        _showDeleteDocumentConfirmation(controller, doc),
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ],
               ),
-            ),
-          );
-        },
-      );
+              const SizedBox(height: AppSpacing.md),
+              Divider(color: AppColors.divider, height: 1),
+              const SizedBox(height: AppSpacing.md),
+
+              // Details
+              _DocumentDetailRow(
+                label: 'Issue Date',
+                value: doc.formatDate(doc.issueDate),
+              ),
+              _DocumentDetailRow(
+                label: 'Expiry Date',
+                value: doc.formatDate(doc.expiryDate),
+                trailing: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: expiryColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              _DocumentDetailRow(
+                label: 'Authority',
+                value: doc.issueAuthority ?? '-',
+              ),
+              _DocumentDetailRow(
+                label: 'City',
+                value: doc.city ?? '-',
+              ),
+              _DocumentDetailRow(
+                label: 'Amount',
+                value: doc.amount != null ? doc.amount!.toStringAsFixed(2) : '-',
+                isLast: true,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _getDocTypeName(AddEditVehicleController controller, int? docType) {
+    var genCon = Get.find<GeneralMastersController>();
+
+    try {
+      return genCon.companyDocumentTypes
+              .firstWhere((t) => t.docType == docType)
+              .docDescription ??
+          'Unknown';
+    } catch (_) {
+      return 'Unknown';
     }
   }
 
-  Widget _buildDocumentDetailRow(String label, dynamic value) {
+  // ============================================================
+  // TYRES SECTION
+  // ============================================================
+
+  Widget _buildTyresSection(AddEditVehicleController controller) {
+    return Obx(() {
+      final allTyres = controller.vehicleData.value?.tyres ?? [];
+      final displayTyres = controller.filteredTyres;
+      final activeCount = controller.activeTyreCount;
+      final maxTyres = controller.maxTyresAllowed;
+      final showActiveOnly = controller.showActiveTyresOnly.value;
+      final isListView = controller.tyreListView.value;
+
+      return Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: AppRadius.borderLg,
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppColors.divider)),
+              ),
+              child: Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.sm,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  // Title with counts
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withOpacity(0.1),
+                          borderRadius: AppRadius.borderMd,
+                        ),
+                        child: Icon(
+                          Icons.tire_repair_outlined,
+                          color: AppColors.accent,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Text('Vehicle Tyres', style: AppTextStyles.label),
+                      const SizedBox(width: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withOpacity(0.1),
+                          borderRadius: AppRadius.borderFull,
+                        ),
+                        child: Text(
+                          '${allTyres.length}/$maxTyres',
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: AppColors.accent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withOpacity(0.1),
+                          borderRadius: AppRadius.borderFull,
+                        ),
+                        child: Text(
+                          '$activeCount Active',
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: AppColors.success,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Actions
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // View mode toggle
+                      IconButton(
+                        onPressed: controller.toggleTyreViewMode,
+                        tooltip: isListView ? 'Grid view' : 'List view',
+                        icon: Icon(
+                          isListView
+                              ? Icons.grid_view_outlined
+                              : Icons.view_list_outlined,
+                          size: 20,
+                          color: AppColors.accent,
+                        ),
+                        style: IconButton.styleFrom(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                        ),
+                      ),
+                      // Toggle filter button
+                      TextButton.icon(
+                        onPressed: controller.toggleTyreFilter,
+                        icon: Icon(
+                          showActiveOnly
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          size: 18,
+                          color: AppColors.accent,
+                        ),
+                        label: Text(
+                          showActiveOnly ? 'Show All' : 'Active Only',
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: AppColors.accent,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+
+                      // Add button
+                      if (activeCount < maxTyres)
+                        Builder(builder: (ctx) {
+                          return _SmallButton(
+                            label: 'Add Tyre',
+                            icon: Icons.add_outlined,
+                            onPressed: () {
+                              final newIndex = controller.addNewTyre();
+                              log("newIndex: $newIndex");
+                              if (newIndex >= 0) {
+                                final newTyre = controller
+                                    .vehicleData.value!.tyres![newIndex];
+                                showTyreEditDialog(
+                                  ctx,
+                                  controller,
+                                  newTyre,
+                                  newIndex,
+                                  isNew: true,
+                                );
+                              }
+                            },
+                          );
+                        }),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: displayTyres.isEmpty
+                  ? _EmptyPlaceholder(
+                      icon: Icons.tire_repair_outlined,
+                      message: showActiveOnly
+                          ? 'No active tyres found'
+                          : 'No tyres added yet',
+                    )
+                  : isListView
+                      ? ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 520),
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            padding: EdgeInsets.zero,
+                            itemCount: displayTyres.length,
+                            separatorBuilder: (_, __) =>
+                                Divider(height: 1, color: AppColors.divider),
+                            itemBuilder: (context, index) {
+                              final tyre = displayTyres[index];
+                              final actualIndex = allTyres.indexOf(tyre);
+                              return _TyreListRow(
+                                tyre: tyre,
+                                index: actualIndex,
+                                controller: controller,
+                              );
+                            },
+                          ),
+                        )
+                      : ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 520),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final tyresPerRow = constraints.maxWidth > 900
+                                  ? 3
+                                  : constraints.maxWidth > 500
+                                      ? 2
+                                      : 1;
+
+                              return GridView.builder(
+                                shrinkWrap: true,
+                                padding: EdgeInsets.zero,
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: tyresPerRow,
+                                  crossAxisSpacing: AppSpacing.md,
+                                  mainAxisSpacing: AppSpacing.md,
+                                  mainAxisExtent: 300,
+                                ),
+                                itemCount: displayTyres.length,
+                                itemBuilder: (context, index) {
+                                  final tyre = displayTyres[index];
+                                  final actualIndex = allTyres.indexOf(tyre);
+
+                                  return _CompactTyreCard(
+                                    tyre: tyre,
+                                    index: actualIndex,
+                                    controller: controller,
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  // ============================================================
+  // ACTION BUTTONS
+  // ============================================================
+
+  Widget _buildActionButtons(AddEditVehicleController controller) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 100,
-          child: Text(
-            '$label:',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
+        Expanded(
+          flex: 2,
+          child: SizedBox(
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: () => _saveChanges(controller),
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Save Changes'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: AppRadius.borderMd,
+                ),
+              ),
             ),
           ),
         ),
+        const SizedBox(width: AppSpacing.lg),
         Expanded(
-          child: value is Widget ? value : Text(value.toString()),
+          child: SizedBox(
+            height: 52,
+            child: OutlinedButton.icon(
+              onPressed: () => _cancelEdit(controller),
+              icon: Icon(Icons.close, color: AppColors.textSecondary),
+              label: Text(
+                'Cancel',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: AppColors.divider),
+                shape: RoundedRectangleBorder(
+                  borderRadius: AppRadius.borderMd,
+                ),
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildExpiryIndicator(DateTime? expiryDate) {
-    if (expiryDate == null) return SizedBox();
-
-    final now = DateTime.now();
-    final daysUntilExpiry = expiryDate.difference(now).inDays;
-
-    Color indicatorColor;
-    String tooltip;
-
-    if (daysUntilExpiry < 0) {
-      indicatorColor = Colors.red;
-      tooltip = 'Expired';
-    } else if (daysUntilExpiry <= 30) {
-      indicatorColor = Colors.orange;
-      tooltip = 'Expiring soon';
-    } else if (daysUntilExpiry <= 90) {
-      indicatorColor = Colors.amber;
-      tooltip = 'Expires in $daysUntilExpiry days';
-    } else {
-      indicatorColor = Colors.green;
-      tooltip = 'Valid';
-    }
-
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: indicatorColor,
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
-
-  Color _getDocumentTypeColor(int? docType) {
-    switch (docType) {
-      case 1001:
-        return Colors.blue[700]!; // Insurance
-      case 1002:
-        return Colors.green[700]!; // Mulkiya
-      case 1003:
-        return Colors.purple[700]!; // Service
-      case 1004:
-        return Colors.amber[700]!; // Registration
-      case 1005:
-        return Colors.teal[700]!; // Permit
-      default:
-        return Colors.grey[700]!; // Other
+  void _saveChanges(AddEditVehicleController controller) async {
+    final vehicle = controller.vehicleData.value;
+    if (vehicle != null) {
+      await controller.createUpdateVehicle(
+        newVehicle: vehicle,
+        isNew: false,
+      );
     }
   }
 
-// Dialog to add a new document
+  void _cancelEdit(AddEditVehicleController controller) {
+    controller.clearSearch();
+  }
+
+  // ============================================================
+  // DOCUMENT DIALOGS
+  // ============================================================
+
   void _showAddDocumentDialog(AddEditVehicleController controller) {
+    var genCon = Get.find<GeneralMastersController>();
+
     final formKey = GlobalKey<FormState>();
     final issueDateController = TextEditingController();
     final expiryDateController = TextEditingController();
     final issueAuthorityController = TextEditingController();
     final cityController = TextEditingController();
+    final amountController = TextEditingController();
 
-    DocumentType? selectedDocType;
+    DocumentMaster? selectedDocType;
     DateTime selectedIssueDate = DateTime.now();
-    DateTime selectedExpiryDate = DateTime.now().add(Duration(days: 365));
+    DateTime selectedExpiryDate = DateTime.now().add(const Duration(days: 365));
 
-    // Initialize the date controller values
     issueDateController.text =
-        DateFormat('dd/MM/yyyy').format(selectedIssueDate);
+        DateFormat('yyyy-MM-dd').format(selectedIssueDate);
     expiryDateController.text =
-        DateFormat('dd/MM/yyyy').format(selectedExpiryDate);
+        DateFormat('yyyy-MM-dd').format(selectedExpiryDate);
 
     Get.dialog(
       Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
         child: Container(
-          width: Get.width > 600 ? 600 : Get.width * 0.9,
-          padding: EdgeInsets.all(16),
+          width: Get.width > 600 ? 500 : Get.width * 0.9,
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -532,161 +1184,173 @@ class AddEditVehiclePage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Add New Document',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[800],
-                    ),
+                  // Header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.note_add_outlined,
+                          color: AppColors.accent,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Text('Add New Document', style: AppTextStyles.h4),
+                    ],
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xl),
+                  Divider(color: AppColors.divider),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Document Type
-                  Text('Document Type',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildDropdownField<DocumentType>(
+                  _DialogDropdown<DocumentMaster>(
+                    label: 'Document Type',
                     value: selectedDocType,
-                    label: "Document Type",
-                    options: controller.availableDocumentTypes,
-                    onChanged: (value) {
-                      if (value != null) {
-                        selectedDocType = value;
-                      }
-                    },
-                    validator: (value) =>
-                        value == null ? 'Please select a document type' : null,
-                    displayTextBuilder: (text) =>
-                        text.docDescription.toString(),
+                    items: genCon.companyDocumentTypes,
+                    displayBuilder: (t) => t.docDescription ?? '',
+                    onChanged: (value) => selectedDocType = value,
+                    validator: (v) =>
+                        v == null ? 'Please select document type' : null,
                   ),
-
-                  SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Issue Date
-                  Text('Issue Date',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildTextFormField(
-                    label: "Select Date",
-                    editingCon: issueDateController,
+                  _DialogDateField(
+                    label: 'Issue Date',
+                    controller: issueDateController,
                     onTap: () async {
-                      final DateTime? pickedDate = await showDatePicker(
+                      final picked = await showDatePicker(
                         context: Get.context!,
                         initialDate: selectedIssueDate,
                         firstDate: DateTime(2000),
-                        lastDate: DateTime.now().add(Duration(
-                            days:
-                                30)), // Allow selection slightly in the future
+                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                        builder: (context, child) =>
+                            _datePickerTheme(context, child),
                       );
-                      if (pickedDate != null) {
-                        selectedIssueDate = pickedDate;
+                      if (picked != null) {
+                        selectedIssueDate = picked;
                         issueDateController.text =
-                            DateFormat('dd/MM/yyyy').format(pickedDate);
+                            DateFormat('yyyy-MM-dd').format(picked);
                       }
                     },
-                    validator: (value) =>
-                        value!.isEmpty ? 'Please select issue date' : null,
-                    readOnly: true,
                   ),
-
-                  SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Expiry Date
-                  Text('Expiry Date',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildTextFormField(
-                    editingCon: expiryDateController,
-                    label: "Select Date",
+                  _DialogDateField(
+                    label: 'Expiry Date',
+                    controller: expiryDateController,
                     onTap: () async {
-                      final DateTime? pickedDate = await showDatePicker(
+                      final picked = await showDatePicker(
                         context: Get.context!,
                         initialDate: selectedExpiryDate,
                         firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(Duration(days: 365 * 5)),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 365 * 5)),
+                        builder: (context, child) =>
+                            _datePickerTheme(context, child),
                       );
-                      if (pickedDate != null) {
-                        selectedExpiryDate = pickedDate;
+                      if (picked != null) {
+                        selectedExpiryDate = picked;
                         expiryDateController.text =
-                            DateFormat('dd/MM/yyyy').format(pickedDate);
+                            DateFormat('yyyy-MM-dd').format(picked);
                       }
                     },
-                    validator: (value) =>
-                        value!.isEmpty ? 'Please select expiry date' : null,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Issue Authority
-                  Text('Issuing Authority',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildTextFormField(
-                    editingCon: issueAuthorityController,
-                    label: 'E.g., RTA, Dubai Insurance',
-                    validator: (value) => value!.isEmpty
-                        ? 'Please enter issuing authority'
-                        : null,
+                  _DialogTextField(
+                    label: 'Issuing Authority',
+                    controller: issueAuthorityController,
+                    hint: 'E.g., RTA, Dubai Insurance',
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // City
-                  Text('City', style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildDropdownField(
-                    label: "City",
-                    options: controller.permittedAreas,
-                    onChanged: (city) {
-                      cityController.text = city!;
-                    },
-                    validator: (value) =>
-                        value!.isEmpty ? 'Please enter city' : null,
+                  _DialogDropdown<City>(
+                    label: 'City',
                     value: null,
+                    items: genCon.companyCity.toList(),
+                    displayBuilder: (c) => c.city ?? '',
+                    onChanged: (c) => cityController.text = c?.city ?? '',
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Amount
+                  _DialogTextField(
+                    label: 'Amount',
+                    controller: amountController,
+                    hint: 'E.g., 500.00',
+                    keyboardType: TextInputType.number,
                   ),
 
-                  SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xxl),
 
                   // Buttons
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
-                        onPressed: () => Get.back(),
-                        child: Text('Cancel'),
-                      ),
-                      SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (formKey.currentState!.validate()) {
-                            // Create the new document
-                            final newDocument = VehicleDocument(
-                              company: controller.vehicleData.value?.company,
-                              vehicleNo:
-                                  controller.vehicleData.value?.vehicleNo,
-                              docType: selectedDocType?.docType,
-                              issueDate: selectedIssueDate,
-                              expiryDate: selectedExpiryDate,
-                              issueAuthority: issueAuthorityController.text,
-                              city: cityController.text,
-                            );
-                            log(newDocument.toString());
-
-                            // Add to the vehicle data
-                            controller.addDocument(newDocument);
-
-                            Get.back();
-                            CustomWidget.customSnackBar(
-                              isError: false,
-                              title: 'Success',
-                              message: 'Document added successfully',
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Get.back(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textSecondary,
+                            side: BorderSide(color: AppColors.divider),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.md,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AppRadius.borderMd,
+                            ),
+                          ),
+                          child: const Text('Cancel'),
                         ),
-                        child: Text('Add Document'),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            if (formKey.currentState!.validate() &&
+                                selectedDocType != null) {
+                              final newDocument = VehicleDocument(
+                                company: controller.vehicleData.value?.company,
+                                vehicleNo:
+                                    controller.vehicleData.value?.vehicleNo,
+                                docType: selectedDocType?.docType,
+                                issueDate: selectedIssueDate,
+                                expiryDate: selectedExpiryDate,
+                                issueAuthority: issueAuthorityController.text,
+                                city: cityController.text,
+                                amount: double.tryParse(amountController.text),
+                              );
+
+                              controller.addDocument(newDocument);
+                              Get.back();
+                              CustomWidget.customSnackBar(
+                                isError: false,
+                                title: 'Success',
+                                message: 'Document added successfully',
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add Document'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.md,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AppRadius.borderMd,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -699,7 +1363,6 @@ class AddEditVehiclePage extends StatelessWidget {
     );
   }
 
-// Dialog to edit an existing document
   void _showEditDocumentDialog(
     AddEditVehicleController controller,
     VehicleDocument document,
@@ -710,26 +1373,31 @@ class AddEditVehiclePage extends StatelessWidget {
     final issueAuthorityController =
         TextEditingController(text: document.issueAuthority);
     final cityController = TextEditingController(text: document.city);
+    final amountController = TextEditingController(
+        text: document.amount != null ? document.amount.toString() : '');
+    var genCon = Get.find<GeneralMastersController>();
 
-    DocumentType? selectedDocType = controller.availableDocumentTypes
-        .where((type) => type.docType == document.docType)
-        .first;
+    DocumentMaster? selectedDocType;
+    try {
+      selectedDocType = genCon.companyDocumentTypes
+          .firstWhere((t) => t.docType == document.docType);
+    } catch (_) {}
+
     DateTime selectedIssueDate = document.issueDate ?? DateTime.now();
     DateTime selectedExpiryDate =
-        document.expiryDate ?? DateTime.now().add(Duration(days: 365));
+        document.expiryDate ?? DateTime.now().add(const Duration(days: 365));
 
-    // Initialize the date controller values
     issueDateController.text =
-        DateFormat('dd/MM/yyyy').format(selectedIssueDate);
+        DateFormat('yyyy-MM-dd').format(selectedIssueDate);
     expiryDateController.text =
-        DateFormat('dd/MM/yyyy').format(selectedExpiryDate);
+        DateFormat('yyyy-MM-dd').format(selectedExpiryDate);
 
     Get.dialog(
       Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
         child: Container(
-          width: Get.width > 600 ? 600 : Get.width * 0.9,
-          padding: EdgeInsets.all(16),
+          width: Get.width > 600 ? 500 : Get.width * 0.9,
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -737,154 +1405,169 @@ class AddEditVehiclePage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Edit Document',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[800],
-                    ),
+                  // Header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.info.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.edit_document,
+                          color: AppColors.info,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Text('Edit Document', style: AppTextStyles.h4),
+                    ],
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xl),
+                  Divider(color: AppColors.divider),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Document Type
-                  Text('Document Type',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildDropdownField<DocumentType>(
-                    label: "Document Type",
+                  _DialogDropdown<DocumentMaster>(
+                    label: 'Document Type',
                     value: selectedDocType,
-                    options: controller.availableDocumentTypes,
-                    onChanged: (value) {
-                      if (value != null) {
-                        selectedDocType = value;
-                      }
-                    },
-                    validator: (value) =>
-                        value == null ? 'Please select a document type' : null,
-                    displayTextBuilder: (text) => text.docDescription ?? '',
+                    items: genCon.companyDocumentTypes,
+                    displayBuilder: (t) => t.docDescription ?? '',
+                    onChanged: (value) => selectedDocType = value,
                   ),
-
-                  SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Issue Date
-                  Text('Issue Date',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildTextFormField(
-                    editingCon: issueDateController,
-                    readOnly: true,
-                    label: "Select Date",
+                  _DialogDateField(
+                    label: 'Issue Date',
+                    controller: issueDateController,
                     onTap: () async {
-                      final DateTime? pickedDate = await showDatePicker(
+                      final picked = await showDatePicker(
                         context: Get.context!,
                         initialDate: selectedIssueDate,
                         firstDate: DateTime(2000),
-                        lastDate: DateTime.now().add(Duration(days: 30)),
+                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                        builder: (context, child) =>
+                            _datePickerTheme(context, child),
                       );
-                      if (pickedDate != null) {
-                        selectedIssueDate = pickedDate;
+                      if (picked != null) {
+                        selectedIssueDate = picked;
                         issueDateController.text =
-                            DateFormat('dd/MM/yyyy').format(pickedDate);
+                            DateFormat('yyyy-MM-dd').format(picked);
                       }
                     },
-                    validator: (value) =>
-                        value!.isEmpty ? 'Please select issue date' : null,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Expiry Date
-                  Text('Expiry Date',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildTextFormField(
-                    editingCon: expiryDateController,
-                    readOnly: true,
-                    label: 'Select Date',
+                  _DialogDateField(
+                    label: 'Expiry Date',
+                    controller: expiryDateController,
                     onTap: () async {
-                      final DateTime? pickedDate = await showDatePicker(
+                      final picked = await showDatePicker(
                         context: Get.context!,
                         initialDate: selectedExpiryDate,
                         firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(Duration(days: 365 * 5)),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 365 * 5)),
+                        builder: (context, child) =>
+                            _datePickerTheme(context, child),
                       );
-                      if (pickedDate != null) {
-                        selectedExpiryDate = pickedDate;
+                      if (picked != null) {
+                        selectedExpiryDate = picked;
                         expiryDateController.text =
-                            DateFormat('dd/MM/yyyy').format(pickedDate);
+                            DateFormat('yyyy-MM-dd').format(picked);
                       }
                     },
-                    validator: (value) =>
-                        value!.isEmpty ? 'Please select expiry date' : null,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Issue Authority
-                  Text('Issuing Authority',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildTextFormField(
-                    editingCon: issueAuthorityController,
-                    label: 'E.g., RTA, Dubai Insurance',
-                    validator: (value) => value!.isEmpty
-                        ? 'Please enter issuing authority'
-                        : null,
+                  _DialogTextField(
+                    label: 'Issuing Authority',
+                    controller: issueAuthorityController,
+                    hint: 'E.g., RTA, Dubai Insurance',
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // City
-                  Text('City', style: TextStyle(fontWeight: FontWeight.w600)),
-                  SizedBox(height: 8),
-                  _buildDropdownField(
-                      label: "City",
-                      options: controller.permittedAreas,
-                      onChanged: (city) {
-                        cityController.text = city!;
-                      },
-                      validator: (value) =>
-                          value!.isEmpty ? 'Please enter city' : null,
-                      value: null),
+                  _DialogDropdown<City>(
+                    label: 'City',
+                    value: genCon.companyCity
+                        .firstWhereOrNull((c) => c.city == document.city),
+                    items: genCon.companyCity.toList(),
+                    displayBuilder: (c) => c.city ?? '',
+                    onChanged: (c) => cityController.text = c?.city ?? '',
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
 
-                  SizedBox(height: 24),
+                  // Amount
+                  _DialogTextField(
+                    label: 'Amount',
+                    controller: amountController,
+                    hint: 'E.g., 500.00',
+                    keyboardType: TextInputType.number,
+                  ),
+
+                  const SizedBox(height: AppSpacing.xxl),
 
                   // Buttons
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
-                        onPressed: () => Get.back(),
-                        child: Text('Cancel'),
-                      ),
-                      SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (formKey.currentState!.validate()) {
-                            // Create updated document
-                            final updatedDocument = document.copyWith(
-                              docType: selectedDocType?.docType,
-                              issueDate: selectedIssueDate,
-                              expiryDate: selectedExpiryDate,
-                              issueAuthority: issueAuthorityController.text,
-                              city: cityController.text,
-                            );
-
-                            // Update the document
-                            controller.updateDocument(
-                                document, updatedDocument);
-
-                            Get.back();
-                            CustomWidget.customSnackBar(
-                              isError: false,
-                              title: 'Success',
-                              message: 'Document updated successfully',
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue[700],
-                          foregroundColor: Colors.white,
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Get.back(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textSecondary,
+                            side: BorderSide(color: AppColors.divider),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.md,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AppRadius.borderMd,
+                            ),
+                          ),
+                          child: const Text('Cancel'),
                         ),
-                        child: Text('Update Document'),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            if (formKey.currentState!.validate()) {
+                              final updatedDocument = document.copyWith(
+                                docType: selectedDocType?.docType,
+                                issueDate: selectedIssueDate,
+                                expiryDate: selectedExpiryDate,
+                                issueAuthority: issueAuthorityController.text,
+                                city: cityController.text,
+                                amount: double.tryParse(amountController.text),
+                              );
+
+                              controller.updateDocument(
+                                  document, updatedDocument);
+                              Get.back();
+                              CustomWidget.customSnackBar(
+                                isError: false,
+                                title: 'Success',
+                                message: 'Document updated successfully',
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Update'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.info,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.md,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AppRadius.borderMd,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -897,551 +1580,1573 @@ class AddEditVehiclePage extends StatelessWidget {
     );
   }
 
-// Confirmation dialog for deleting a document
   void _showDeleteDocumentConfirmation(
-      AddEditVehicleController controller, VehicleDocument document) {
+    AddEditVehicleController controller,
+    VehicleDocument document,
+  ) {
     Get.dialog(
-      AlertDialog(
-        title: Text('Delete Document'),
-        content: Text(
-            'Are you sure you want to delete this document? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Cancel'),
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.delete_outline,
+                  color: AppColors.error,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text('Delete Document?', style: AppTextStyles.h4),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Are you sure you want to delete this document? This action cannot be undone.',
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.xxl),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Get.back(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        side: BorderSide(color: AppColors.divider),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.md,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppRadius.borderMd,
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        controller.removeDocument(document);
+                        Get.back();
+                        CustomWidget.customSnackBar(
+                          isError: false,
+                          title: 'Success',
+                          message: 'Document deleted successfully',
+                        );
+                      },
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Delete'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.md,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppRadius.borderMd,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              // Remove the document
-              controller.removeDocument(document);
+        ),
+      ),
+    );
+  }
 
-              Get.back();
-              CustomWidget.customSnackBar(
-                isError: false,
-                title: 'Success',
-                message: 'Document deleted successfully',
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+  Widget _datePickerTheme(BuildContext context, Widget? child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: ColorScheme.light(
+          primary: AppColors.accent,
+          onPrimary: Colors.white,
+          surface: AppColors.cardBg,
+          onSurface: AppColors.textPrimary,
+        ),
+      ),
+      child: child!,
+    );
+  }
+}
+
+// ============================================================
+// REUSABLE WIDGETS
+// ============================================================
+
+class _SectionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Widget? headerExtra;
+  final Widget? trailing;
+  final Widget child;
+
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.headerExtra,
+    this.trailing,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.borderLg,
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: AppColors.cardBg,
+              // borderRadius: AppRadius.borderLg,
+              borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(AppRadius.lg),
+                  topRight: Radius.circular(AppRadius.lg)),
+              border: Border(
+                bottom: BorderSide(color: AppColors.divider),
+              ),
             ),
-            child: Text('Delete'),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withOpacity(0.1),
+                    borderRadius: AppRadius.borderMd,
+                  ),
+                  child: Icon(icon, color: AppColors.accent, size: 20),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(title, style: AppTextStyles.label),
+                          if (headerExtra != null) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            headerExtra!,
+                          ],
+                        ],
+                      ),
+                      if (subtitle != null)
+                        Text(subtitle!, style: AppTextStyles.caption),
+                    ],
+                  ),
+                ),
+                if (trailing != null) trailing!,
+              ],
+            ),
+          ),
+
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: child,
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildTyresSection(AddEditVehicleController controller) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        int tyresPerRow = _calculateTyresPerRow(constraints.maxWidth);
+class _ReadOnlyField extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final double? width;
 
-        return Obx(() {
-          // Safely access tyres list, defaulting to empty list if null
-          final tyres = controller.vehicleData.value?.tyres ?? [];
-          final maxTyres = controller.maxTyresAllowed;
+  const _ReadOnlyField({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.width,
+  });
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with add button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg,
+          borderRadius: AppRadius.borderMd,
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: AppColors.textMuted),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(label, style: AppTextStyles.caption),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'Tyres (${tyres.length}/$maxTyres)',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[900],
+                    value,
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (tyres.length < maxTyres)
-                    ElevatedButton.icon(
-                      onPressed: () => controller.addNewTyre(),
-                      icon: const Icon(
-                        Icons.add_circle_outline,
-                        color: Colors.white,
-                      ),
-                      label: const Text('Add Tyre'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[700],
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
                 ],
               ),
-              const SizedBox(height: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-              // No tyres message
-              if (tyres.isEmpty)
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.symmetric(vertical: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'No tyres added yet. Click "Add Tyre" to begin.',
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+class _StyledTextField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final IconData icon;
+  final TextInputType? keyboardType;
+  final void Function(String)? onChanged;
+  final double? width;
+
+  const _StyledTextField({
+    required this.label,
+    required this.controller,
+    required this.icon,
+    this.keyboardType,
+    this.onChanged,
+    this.width,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        onChanged: onChanged,
+        style: AppTextStyles.body,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: AppTextStyles.bodySmall,
+          prefixIcon: Icon(icon, size: 20, color: AppColors.accent),
+          filled: true,
+          fillColor: AppColors.cardBg,
+          border: OutlineInputBorder(
+            borderRadius: AppRadius.borderMd,
+            borderSide: BorderSide(color: AppColors.divider),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: AppRadius.borderMd,
+            borderSide: BorderSide(color: AppColors.divider),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: AppRadius.borderMd,
+            borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StyledDropdown<T> extends StatelessWidget {
+  final String label;
+  final T? value;
+  final List<T> items;
+  final IconData icon;
+  final void Function(T?)? onChanged;
+  final double? width;
+  final String Function(T)? displayBuilder;
+
+  const _StyledDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.icon,
+    this.onChanged,
+    this.width,
+    this.displayBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: DropdownButtonFormField<T>(
+        value: value,
+        items: items.map((item) {
+          return DropdownMenuItem<T>(
+            value: item,
+            child: Text(
+              displayBuilder != null ? displayBuilder!(item) : item.toString(),
+              style: AppTextStyles.body,
+            ),
+          );
+        }).toList(),
+        selectedItemBuilder: displayBuilder == null
+            ? null
+            : (context) => items
+                .map((item) => Text(
+                      displayBuilder!(item),
+                      style: AppTextStyles.body,
+                      overflow: TextOverflow.ellipsis,
+                    ))
+                .toList(),
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: AppTextStyles.bodySmall,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          prefixIcon: Icon(icon, size: 20, color: AppColors.accent),
+          filled: true,
+          fillColor: AppColors.cardBg,
+          border: OutlineInputBorder(
+            borderRadius: AppRadius.borderMd,
+            borderSide: BorderSide(color: AppColors.divider),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: AppRadius.borderMd,
+            borderSide: BorderSide(color: AppColors.divider),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: AppRadius.borderMd,
+            borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+        ),
+        dropdownColor: AppColors.cardBg,
+        isExpanded: true,
+        isDense: true,
+        borderRadius: AppRadius.borderLg,
+        style: AppTextStyles.body,
+      ),
+    );
+  }
+}
+
+class _SmallButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _SmallButton({
+    required this.label,
+    required this.icon,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.accent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.borderSm,
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyPlaceholder extends StatelessWidget {
+  final IconData icon;
+  final String message;
+
+  const _EmptyPlaceholder({
+    required this.icon,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          children: [
+            Icon(icon, size: 40, color: AppColors.textMuted.withOpacity(0.5)),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              message,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DocumentDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Widget? trailing;
+  final bool isLast;
+
+  const _DocumentDetailRow({
+    required this.label,
+    required this.value,
+    this.trailing,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.sm),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: AppTextStyles.body),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: AppSpacing.sm),
+            trailing!,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// COMPACT TYRE CARD
+// ============================================================
+
+class _CompactTyreCard extends StatelessWidget {
+  final Tyre tyre;
+  final int index;
+  final AddEditVehicleController controller;
+
+  const _CompactTyreCard({
+    required this.tyre,
+    required this.index,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = tyre.status == 'Active';
+    final activeCount = controller.activeTyreCount;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isActive ? AppColors.cardBg : AppColors.errorLight,
+        borderRadius: AppRadius.borderMd,
+        border: Border.all(
+          color:
+              isActive ? AppColors.divider : AppColors.error.withOpacity(0.3),
+        ),
+        boxShadow: AppShadows.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? AppColors.primaryDark
+                  : AppColors.error.withOpacity(0.8),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(AppRadius.md),
+                topRight: Radius.circular(AppRadius.md),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Position badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: AppRadius.borderSm,
+                  ),
+                  child: Text(
+                    tyre.position?.status ?? 'Tyre ${index + 1}',
+                    style: AppTextStyles.labelSmall.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-
-              // Responsive tyre grid
-              if (tyres.isNotEmpty)
-                LayoutBuilder(
-                  builder: (context, gridConstraints) {
-                    // Calculate optimal height based on screen size
-                    final screenHeight = MediaQuery.of(context).size.height;
-                    final availableHeight =
-                        screenHeight * 0.6; // Use at most 60% of screen height
-                    final itemHeight = tyresPerRow > 1
-                        ? (availableHeight /
-                            ((tyres.length / tyresPerRow).ceil()))
-                        : 380.0;
-
-                    // Use minimum height of 300, maximum of 450
-                    final actualItemHeight = itemHeight.clamp(430.0, 650.0);
-
-                    return Container(
-                      // Set a reasonable max height for the grid container
-                      constraints: BoxConstraints(
-                        maxHeight:
-                            screenHeight * 0.7, // Limit to 70% of screen height
+                const Spacer(),
+                // Status indicator
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? AppColors.success.withOpacity(0.2)
+                        : Colors.white.withOpacity(0.2),
+                    borderRadius: AppRadius.borderFull,
+                  ),
+                  child: Text(
+                    tyre.status ?? 'Unknown',
+                    style: AppTextStyles.caption.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (tyre.deleteAllowed == true) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  InkWell(
+                    onTap: () => controller.removeTyre(index),
+                    borderRadius: AppRadius.borderFull,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
                       ),
-                      child: ListView(
-                        // This outer ListView makes it scrollable
-                        shrinkWrap: true,
+                      child: const Icon(
+                        Icons.close,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // Content
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                children: [
+                  // Info rows
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
                         children: [
-                          GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            padding: EdgeInsets.zero,
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: tyresPerRow,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
+                          _CompactInfoRow(
+                              label: 'Brand', value: tyre.brand ?? '-'),
+                          _CompactInfoRow(
+                              label: 'Size', value: tyre.size ?? '-'),
+                          _CompactInfoRow(
+                              label: 'KM Used', value: '${tyre.kmUsed ?? 0}'),
+                          _CompactInfoRow(
+                            label: 'Install',
+                            value: tyre.installDt != null
+                                ? tyre.formatDate(tyre.installDt)
+                                : '-',
+                          ),
+                          _CompactInfoRow(
+                            label: 'Expiry',
+                            value: tyre.expDt != null
+                                ? tyre.formatDate(tyre.expDt)
+                                : '-',
+                            valueColor: tyre.expDt != null
+                                ? AppColors.getExpiryColor(tyre.expDt)
+                                : null,
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
 
-                              // Use a calculated aspect ratio instead of fixed mainAxisExtent
-                              childAspectRatio: gridConstraints.maxWidth /
-                                  (tyresPerRow * actualItemHeight),
-                            ),
-                            itemCount: tyres.length,
-                            itemBuilder: (context, index) {
-                              var tyre = tyres[index];
-                              return Card(
-                                elevation: 2,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: SingleChildScrollView(
-                                  // Add inner scrolling for each tyre card
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                'Tyre ${index + 1}',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.blue[800],
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                  Icons.delete_outline,
-                                                  color: Colors.red),
-                                              onPressed: () =>
-                                                  controller.removeTyre(index),
-                                              iconSize: 20,
-                                              splashRadius: 20,
-                                            ),
-                                          ],
-                                        ),
-
-                                        const SizedBox(height: 12),
-
-                                        // Position dropdown
-                                        Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 80,
-                                              child: Text('Position: ',
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold)),
-                                            ),
-                                            Expanded(
-                                              child: DropdownButtonFormField<
-                                                  String>(
-                                                isDense: true,
-                                                value: tyre.position,
-                                                decoration: InputDecoration(
-                                                  contentPadding:
-                                                      EdgeInsets.symmetric(
-                                                          horizontal: 10,
-                                                          vertical: 8),
-                                                  border: OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                  ),
-                                                ),
-                                                items: [
-                                                  'Front Left',
-                                                  'Front Right',
-                                                  'Rear Left',
-                                                  'Rear Right',
-                                                  'Spare',
-                                                  'Other'
-                                                ].map((String value) {
-                                                  return DropdownMenuItem<
-                                                      String>(
-                                                    value: value,
-                                                    child: Text(value,
-                                                        style: TextStyle(
-                                                            fontSize: 14)),
-                                                  );
-                                                }).toList(),
-                                                onChanged: (newValue) {
-                                                  if (newValue != null) {
-                                                    controller
-                                                        .updateTyrePosition(
-                                                            index, newValue);
-                                                  }
-                                                },
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-
-                                        const SizedBox(height: 10),
-
-                                        // Brand field
-                                        _buildEditableField(
-                                            controller: controller,
-                                            index: index,
-                                            label: 'Brand',
-                                            value: tyre.brand ?? '',
-                                            onChanged: (newValue) {
-                                              controller.updateTyreBrand(
-                                                  index, newValue);
-                                            }),
-
-                                        const SizedBox(height: 10),
-
-                                        // Size field
-                                        _buildEditableField(
-                                            controller: controller,
-                                            index: index,
-                                            label: 'Size',
-                                            value: tyre.size ?? '',
-                                            onChanged: (newValue) {
-                                              controller.updateTyreSize(
-                                                  index, newValue);
-                                            }),
-
-                                        const SizedBox(height: 10),
-
-                                        // KM field
-                                        _buildEditableField(
-                                            controller: controller,
-                                            index: index,
-                                            label: 'KM Used',
-                                            value:
-                                                tyre.kmUsed?.toString() ?? '0',
-                                            keyboardType: TextInputType.number,
-                                            onChanged: (newValue) {
-                                              controller.updateTyreKm(
-                                                  index, newValue);
-                                            }),
-
-                                        const SizedBox(height: 10),
-
-                                        // Installation Date
-                                        Row(
-                                          children: [
-                                            const Text('Install Date: ',
-                                                style: TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.bold)),
-                                            Expanded(
-                                              child: InkWell(
-                                                onTap: () async {
-                                                  final DateTime? pickedDate =
-                                                      await showDatePicker(
-                                                    context: context,
-                                                    initialDate:
-                                                        tyre.installDt ??
-                                                            DateTime.now(),
-                                                    firstDate: DateTime(2010),
-                                                    lastDate: DateTime.now()
-                                                        .add(const Duration(
-                                                            days: 1)),
-                                                  );
-                                                  if (pickedDate != null) {
-                                                    controller
-                                                        .updateTyreInstallDate(
-                                                            index, pickedDate);
-                                                  }
-                                                },
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 8),
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                        color: Colors.grey),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .spaceBetween,
-                                                    children: [
-                                                      Text(
-                                                        tyre.installDt != null
-                                                            ? tyre.formatDate(
-                                                                tyre.installDt)
-                                                            : 'Select Date',
-                                                        style: TextStyle(
-                                                          fontSize: 14,
-                                                          color:
-                                                              tyre.installDt !=
-                                                                      null
-                                                                  ? Colors.black
-                                                                  : Colors.grey,
-                                                        ),
-                                                      ),
-                                                      Icon(Icons.calendar_today,
-                                                          size: 16),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-
-                                        const SizedBox(height: 10),
-
-                                        // Expiry Date
-                                        Row(
-                                          children: [
-                                            const Text('Expiry Date: ',
-                                                style: TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.bold)),
-                                            Expanded(
-                                              child: InkWell(
-                                                onTap: () async {
-                                                  final DateTime? pickedDate =
-                                                      await showDatePicker(
-                                                    context: context,
-                                                    initialDate: tyre.expDt ??
-                                                        DateTime.now().add(
-                                                            const Duration(
-                                                                days: 365)),
-                                                    firstDate: DateTime.now(),
-                                                    lastDate: DateTime.now()
-                                                        .add(const Duration(
-                                                            days: 365 * 5)),
-                                                  );
-                                                  if (pickedDate != null) {
-                                                    controller
-                                                        .updateTyreExpiryDate(
-                                                            index, pickedDate);
-                                                  }
-                                                },
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 8),
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                        color: Colors.grey),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .spaceBetween,
-                                                    children: [
-                                                      Text(
-                                                        tyre.expDt != null
-                                                            ? tyre.formatDate(
-                                                                tyre.expDt)
-                                                            : 'Select Date',
-                                                        style: TextStyle(
-                                                          fontSize: 14,
-                                                          color:
-                                                              tyre.expDt != null
-                                                                  ? Colors.black
-                                                                  : Colors.grey,
-                                                        ),
-                                                      ),
-                                                      Icon(Icons.calendar_today,
-                                                          size: 16),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-
-                                        const SizedBox(height: 10),
-
-                                        // Remarks field
-                                        _buildEditableField(
-                                            controller: controller,
-                                            index: index,
-                                            label: 'Remarks',
-                                            value: tyre.remarks ?? '',
-                                            maxLines: 2,
-                                            onChanged: (newValue) {
-                                              controller.updateTyreRemarks(
-                                                  index, newValue);
-                                            }),
-                                      ],
-                                    ),
+                          // Status dropdown
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 70,
+                                child: Text(
+                                  'Status',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.textMuted,
                                   ),
                                 ),
-                              );
-                            },
+                              ),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 36,
+                                  child: DropdownButtonFormField<String>(
+                                    isDense: true,
+                                    value: tyre.status,
+                                    decoration: InputDecoration(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: AppSpacing.sm,
+                                        vertical: 4,
+                                      ),
+                                      filled: true,
+                                      fillColor: AppColors.surface,
+                                      border: OutlineInputBorder(
+                                        borderRadius: AppRadius.borderSm,
+                                        borderSide: BorderSide(
+                                            color: AppColors.divider),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: AppRadius.borderSm,
+                                        borderSide: BorderSide(
+                                            color: AppColors.divider),
+                                      ),
+                                    ),
+                                    style: AppTextStyles.bodySmall,
+                                    dropdownColor: AppColors.cardBg,
+                                    items: ['Active', 'Inactive'].map((value) {
+                                      final isDisabled = value == 'Active' &&
+                                          tyre.status != 'Active' &&
+                                          activeCount >= 6;
+                                      return DropdownMenuItem(
+                                        value: value,
+                                        enabled: !isDisabled,
+                                        child: Text(
+                                          value,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: isDisabled
+                                                ? AppColors.textMuted
+                                                : AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (v) => v != null
+                                        ? controller.updateTyreStatus(index, v)
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    );
-                  },
-                ),
-            ],
-          );
-        });
-      },
+                    ),
+                  ),
+
+                  // Edit button
+                  const SizedBox(height: AppSpacing.sm),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () =>
+                          showTyreEditDialog(context, controller, tyre, index),
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        size: 16,
+                        color: AppColors.accent,
+                      ),
+                      label: Text(
+                        'Edit Details',
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.accent,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.xs,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
+}
 
-// Update this method in your widget to use the controller management
-  Widget _buildEditableField({
-    required AddEditVehicleController controller,
-    required int index,
-    required String label,
-    required String value,
-    required Function(String) onChanged,
-    TextInputType keyboardType = TextInputType.text,
-    int maxLines = 1,
-  }) {
-    // Get field name from label by removing spaces and making first letter lowercase
-    final fieldName = label
-        .replaceAll(' ', '')
-        .replaceFirst(label[0], label[0].toLowerCase());
+// ============================================================
+// TYRE EDIT DIALOG (shared between card and list row)
+// ============================================================
 
-    // Get tyre index from context - this assumes you have access to the tyre index in this scope
-    // If not, you'll need to pass tyreIndex as a parameter to this method
-    final tyreIndex = index; // Use the actual tyre index from your context
+void showTyreEditDialog(
+  BuildContext context,
+  AddEditVehicleController controller,
+  Tyre tyre,
+  int index, {
+  bool isNew = false,
+  bool isCreateMode = false,
+}) {
+  Get.dialog(
+    Dialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 620),
+        child: _TyreEditDialogContent(
+          controller: controller,
+          tyre: tyre,
+          index: index,
+          isNew: isNew,
+          isCreateMode: isCreateMode,
+        ),
+      ),
+    ),
+    barrierDismissible: !isNew,
+  );
+}
 
+// ============================================================
+// TYRE EDIT DIALOG — StatefulWidget to prevent TextField rebuild
+// ============================================================
+
+class _TyreEditDialogContent extends StatefulWidget {
+  final AddEditVehicleController controller;
+  final Tyre tyre;
+  final int index;
+  final bool isNew;
+
+  /// When true, reads/writes tyresList (create flow) instead of vehicleData.tyres (edit flow)
+  final bool isCreateMode;
+
+  const _TyreEditDialogContent({
+    required this.controller,
+    required this.tyre,
+    required this.index,
+    this.isNew = false,
+    this.isCreateMode = false,
+  });
+
+  @override
+  State<_TyreEditDialogContent> createState() => _TyreEditDialogContentState();
+}
+
+class _TyreEditDialogContentState extends State<_TyreEditDialogContent> {
+  late final TextEditingController _brandCtrl;
+  late final TextEditingController _sizeCtrl;
+  late final TextEditingController _kmCtrl;
+  late final TextEditingController _remarksCtrl;
+
+  Tyre get _currentTyre => widget.isCreateMode
+      ? widget.controller.tyresList[widget.index]
+      : widget.controller.vehicleData.value?.tyres?[widget.index] ??
+          widget.tyre;
+
+  @override
+  void initState() {
+    super.initState();
+    final t = _currentTyre;
+    _brandCtrl = TextEditingController(text: t.brand ?? '');
+    _sizeCtrl = TextEditingController(text: t.size ?? '');
+    _kmCtrl = TextEditingController(text: t.kmUsed?.toString() ?? '0');
+    _remarksCtrl = TextEditingController(text: t.remarks ?? '');
+  }
+
+  @override
+  void dispose() {
+    _brandCtrl.dispose();
+    _sizeCtrl.dispose();
+    _kmCtrl.dispose();
+    _remarksCtrl.dispose();
+    super.dispose();
+  }
+
+  Tyre _liveTyre(AddEditVehicleController c, int i) {
+    if (widget.isCreateMode) {
+      return i < c.tyresList.length ? c.tyresList[i] : widget.tyre;
+    }
+    final tyres = c.vehicleData.value?.tyres;
+    return (tyres != null && i < tyres.length) ? tyres[i] : widget.tyre;
+  }
+
+  /// Returns an error message if mandatory fields are missing, null if valid.
+  String? _validateNewTyre() {
+    final t = _liveTyre(widget.controller, widget.index);
+    if (t.position == null) return 'Position is required';
+    if (_brandCtrl.text.trim().isEmpty) return 'Brand is required';
+    if (_sizeCtrl.text.trim().isEmpty) return 'Size is required';
+    if (t.installDt == null) return 'Install Date is required';
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.controller;
+    final i = widget.index;
+    final isNew = widget.isNew;
+    final isCreate = widget.isCreateMode;
+    final genCon = Get.find<GeneralMastersController>();
+
+    // For existing saved tyres (tyreId != 0), lock Brand/Size/InstallDate unless empty
+    bool fieldLocked(String? value) =>
+        !isNew && widget.tyre.tyreId != 0 && (value?.isNotEmpty ?? false);
+
+    void onBrand(String v) =>
+        isCreate ? c.createUpdateTyreBrand(i, v) : c.updateTyreBrand(i, v);
+    void onSize(String v) =>
+        isCreate ? c.createUpdateTyreSize(i, v) : c.updateTyreSize(i, v);
+    void onKm(String v) =>
+        isCreate ? c.createUpdateTyreKm(i, v) : c.updateTyreKm(i, v);
+    void onRemarks(String v) =>
+        isCreate ? c.createUpdateTyreRemarks(i, v) : c.updateTyreRemarks(i, v);
+    void onPosition(StatusMaster? v) => isCreate
+        ? c.createUpdateTyrePosition(i, v)
+        : c.updateTyrePosition(i, v);
+    void onInstall(DateTime d) => isCreate
+        ? c.createUpdateTyreInstallDate(i, d)
+        : c.updateTyreInstallDate(i, d);
+    void onExpiry(DateTime d) => isCreate
+        ? c.createUpdateTyreExpiryDate(i, d)
+        : c.updateTyreExpiryDate(i, d);
+    void onStatus(String v) =>
+        isCreate ? c.createUpdateTyreStatus(i, v) : c.updateTyreStatus(i, v);
+    void onCancel() {
+      Get.back();
+      isCreate ? c.createRemoveTyre(i) : c.removeTyre(i);
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header — reactive only for position label
+        Obx(() {
+          final currentTyre = _liveTyre(c, i);
+          return Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: AppColors.primaryDark,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(AppRadius.xl),
+                topRight: Radius.circular(AppRadius.xl),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: AppRadius.borderMd,
+                  ),
+                  child: const Icon(Icons.tire_repair,
+                      color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isNew ? 'Add New Tyre' : 'Edit Tyre',
+                        style:
+                            AppTextStyles.label.copyWith(color: Colors.white),
+                      ),
+                      Text(
+                        currentTyre.position?.status ?? 'Tyre ${i + 1}',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isNew)
+                  InkWell(
+                    onTap: () => Get.back(),
+                    borderRadius: AppRadius.borderFull,
+                    child: Container(
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close,
+                          color: Colors.white, size: 18),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }),
+
+        // Content
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              children: [
+                // Position — reactive
+                Obx(() {
+                  final currentTyre = _liveTyre(c, i);
+                  return _TyreDialogDropdown<StatusMaster>(
+                    label: 'Position',
+                    value: currentTyre.position,
+                    items: genCon.tirePositionMaster,
+                    displayBuilder: (s) => s.status ?? '',
+                    onChanged: onPosition,
+                  );
+                }),
+                const SizedBox(height: AppSpacing.lg),
+                // Brand — locked for existing saved tyres with a value
+                _TyreDialogTextField(
+                  label: 'Brand',
+                  controller: _brandCtrl,
+                  onChanged: onBrand,
+                  readOnly: fieldLocked(widget.tyre.brand),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                // Size — locked for existing saved tyres with a value
+                _TyreDialogTextField(
+                  label: 'Size',
+                  controller: _sizeCtrl,
+                  onChanged: onSize,
+                  readOnly: fieldLocked(widget.tyre.size),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                // KM Used — always editable
+                _TyreDialogTextField(
+                  label: 'KM Used',
+                  controller: _kmCtrl,
+                  onChanged: onKm,
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                // Install Date — locked for existing saved tyres with a value
+                Obx(() {
+                  final currentTyre = _liveTyre(c, i);
+                  return _TyreDialogDateField(
+                    label: 'Install Date',
+                    value: currentTyre.installDt,
+                    formatDate: currentTyre.formatDate,
+                    firstDate: DateTime(2010),
+                    lastDate: DateTime.now(),
+                    onChanged:
+                        fieldLocked(widget.tyre.installDt?.toIso8601String())
+                            ? null
+                            : onInstall,
+                  );
+                }),
+                const SizedBox(height: AppSpacing.lg),
+                // Expiry Date — always editable
+                Obx(() {
+                  final currentTyre = _liveTyre(c, i);
+                  return _TyreDialogDateField(
+                    label: 'Expiry Date',
+                    value: currentTyre.expDt,
+                    formatDate: currentTyre.formatDate,
+                    firstDate: currentTyre.installDt ??
+                        DateTime.now().subtract(const Duration(days: 1)),
+                    lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                    onChanged: onExpiry,
+                  );
+                }),
+                const SizedBox(height: AppSpacing.lg),
+                // Remarks — always editable
+                _TyreDialogTextField(
+                  label: 'Remarks',
+                  controller: _remarksCtrl,
+                  onChanged: onRemarks,
+                  maxLines: 2,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                // Status — reactive
+                Obx(() {
+                  final currentTyre = _liveTyre(c, i);
+                  final activeCount = isCreate
+                      ? c.tyresList.where((t) => t.status == 'Active').length
+                      : c.activeTyreCount;
+                  final maxTyres = c.maxTyresAllowed;
+                  return _TyreDialogDropdown(
+                    label: 'Status',
+                    value: currentTyre.status,
+                    items: const ['Active', 'Inactive'],
+                    disabledItems: currentTyre.status != 'Active' &&
+                            activeCount >= maxTyres
+                        ? ['Active']
+                        : [],
+                    onChanged: (v) => onStatus(v!),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+
+        // Footer
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.divider)),
+          ),
+          child: Row(
+            mainAxisAlignment:
+                isNew ? MainAxisAlignment.spaceBetween : MainAxisAlignment.end,
+            children: [
+              if (isNew)
+                OutlinedButton(
+                  onPressed: onCancel,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: BorderSide(color: AppColors.error),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: AppRadius.borderMd),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              if (isNew)
+                ElevatedButton(
+                  onPressed: () {
+                    final error = _validateNewTyre();
+                    if (error != null) {
+                      CustomWidget.customSnackBar(
+                        title: 'Required',
+                        message: error,
+                        isError: true,
+                      );
+                      return;
+                    }
+                    Get.back();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: AppRadius.borderMd),
+                  ),
+                  child: const Text('Add Tyre'),
+                ),
+              if (!isNew)
+                OutlinedButton(
+                  onPressed: () => Get.back(),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: BorderSide(color: AppColors.divider),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: AppRadius.borderMd),
+                  ),
+                  child: const Text('Close'),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================
+// TYRE LIST ROW (compact list view)
+// ============================================================
+
+class _TyreListRow extends StatelessWidget {
+  final Tyre tyre;
+  final int index;
+  final AddEditVehicleController controller;
+
+  const _TyreListRow({
+    required this.tyre,
+    required this.index,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = tyre.status == 'Active';
+    final hasExpiry = tyre.expDt != null;
+    final expiryColor =
+        hasExpiry ? AppColors.getExpiryColor(tyre.expDt) : AppColors.textMuted;
+
+    return InkWell(
+      onTap: () => showTyreEditDialog(context, controller, tyre, index),
+      borderRadius: AppRadius.borderSm,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            // Status colour bar
+            Container(
+              width: 3,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isActive ? AppColors.success : AppColors.error,
+                borderRadius: AppRadius.borderFull,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+
+            // Position badge
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                color: isActive
+                    ? AppColors.primaryDark.withOpacity(0.08)
+                    : AppColors.error.withOpacity(0.08),
+                borderRadius: AppRadius.borderSm,
+              ),
+              child: Text(
+                tyre.position?.status ?? '#${index + 1}',
+                style: AppTextStyles.labelSmall.copyWith(
+                  color: isActive ? AppColors.primaryDark : AppColors.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+
+            // Brand · size
+            Expanded(
+              flex: 3,
+              child: Text(
+                [tyre.brand, tyre.size]
+                    .where((s) => s != null && s.isNotEmpty)
+                    .join(' · '),
+                style: AppTextStyles.body,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+            // KM
+            Expanded(
+              flex: 2,
+              child: Row(
+                children: [
+                  Icon(Icons.speed_outlined,
+                      size: 14, color: AppColors.textMuted),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${tyre.kmUsed ?? 0} km',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Expiry
+            Expanded(
+              flex: 2,
+              child: Row(
+                children: [
+                  Icon(Icons.event_outlined, size: 14, color: expiryColor),
+                  const SizedBox(width: 4),
+                  Text(
+                    hasExpiry ? tyre.formatDate(tyre.expDt) : '—',
+                    style: AppTextStyles.bodySmall.copyWith(color: expiryColor),
+                  ),
+                ],
+              ),
+            ),
+
+            // Status chip
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: isActive
+                    ? AppColors.success.withOpacity(0.12)
+                    : AppColors.error.withOpacity(0.12),
+                borderRadius: AppRadius.borderFull,
+              ),
+              child: Text(
+                tyre.status ?? '',
+                style: AppTextStyles.caption.copyWith(
+                  color: isActive ? AppColors.success : AppColors.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+
+            // Edit icon
+            Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactInfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _CompactInfoRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(
+              label,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: AppTextStyles.body.copyWith(
+                fontWeight: FontWeight.w500,
+                color: valueColor ?? AppColors.textPrimary,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// TYRE DIALOG WIDGETS
+// ============================================================
+
+class _TyreDialogTextField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final void Function(String) onChanged;
+  final TextInputType keyboardType;
+  final int maxLines;
+  final bool readOnly;
+
+  const _TyreDialogTextField({
+    required this.label,
+    required this.controller,
+    required this.onChanged,
+    this.keyboardType = TextInputType.text,
+    this.maxLines = 1,
+    this.readOnly = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment:
+          maxLines > 1 ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
         SizedBox(
-            width: 80,
-            child: Text('$label: ',
-                style: TextStyle(fontWeight: FontWeight.bold))),
+          width: 100,
+          child: Text(
+            label,
+            style: AppTextStyles.label,
+          ),
+        ),
         Expanded(
           child: TextField(
-            controller:
-                controller.getTyreFieldController(tyreIndex, fieldName, value),
-            decoration: InputDecoration(
-              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              isDense: true,
-            ),
-            style: TextStyle(fontSize: 14),
+            controller: controller,
             keyboardType: keyboardType,
             maxLines: maxLines,
+            onChanged: readOnly ? null : onChanged,
+            readOnly: readOnly,
+            style: AppTextStyles.body.copyWith(
+              color: readOnly ? AppColors.textMuted : AppColors.textPrimary,
+            ),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: readOnly
+                  ? AppColors.surface.withOpacity(0.5)
+                  : AppColors.surface,
+              suffixIcon: readOnly
+                  ? Icon(Icons.lock_outline,
+                      size: 14, color: AppColors.textMuted)
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: AppRadius.borderMd,
+                borderSide: BorderSide(color: AppColors.divider),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: AppRadius.borderMd,
+                borderSide: BorderSide(color: AppColors.divider),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: AppRadius.borderMd,
+                borderSide: BorderSide(
+                  color: readOnly ? AppColors.divider : AppColors.accent,
+                  width: 1.5,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TyreDialogDropdown<T> extends StatelessWidget {
+  final String label;
+  final T? value;
+  final List<T> items;
+  final void Function(T?) onChanged;
+  final List<T> disabledItems;
+  final String Function(T)? displayBuilder;
+
+  const _TyreDialogDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.disabledItems = const <Never>[],
+    this.displayBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            label,
+            style: AppTextStyles.label,
+          ),
+        ),
+        Expanded(
+          child: DropdownButtonFormField<T>(
+            isDense: true,
+            value: value,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: AppRadius.borderMd,
+                borderSide: BorderSide(color: AppColors.divider),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: AppRadius.borderMd,
+                borderSide: BorderSide(color: AppColors.divider),
+              ),
+            ),
+            style: AppTextStyles.body,
+            dropdownColor: AppColors.cardBg,
+            items: items.map((item) {
+              final isDisabled = disabledItems.contains(item);
+              return DropdownMenuItem<T>(
+                value: item,
+                enabled: !isDisabled,
+                child: Text(
+                  displayBuilder != null
+                      ? displayBuilder!(item)
+                      : item.toString(),
+                  style: AppTextStyles.body.copyWith(
+                    color: isDisabled
+                        ? AppColors.textMuted
+                        : AppColors.textPrimary,
+                  ),
+                ),
+              );
+            }).toList(),
+            // selectedItemBuilder: displayBuilder == null
+            //     ? null
+            //     : (context) => items
+            //         .map((item) => Text(
+            //               displayBuilder!(item),
+            //               style: AppTextStyles.body,
+            //               overflow: TextOverflow.ellipsis,
+            //             ))
+            //         .toList(),
+            // items: items.map((item) {
+            //   final isDisabled = disabledItems.contains(item);
+            //   return DropdownMenuItem(
+            //     value: item,
+            //     enabled: !isDisabled,
+            //     child: Text(
+            //       item,
+            //       style: TextStyle(
+            //         color: isDisabled
+            //             ? AppColors.textMuted
+            //             : AppColors.textPrimary,
+            //       ),
+            //     ),
+            //   );
+            // }).toList(),
             onChanged: onChanged,
           ),
         ),
       ],
     );
   }
+}
 
-// Utility method to calculate tyres per row
-  int _calculateTyresPerRow(double width) {
-    if (width > 1200) return 4;
-    if (width > 800) return 3;
-    if (width > 600) return 2;
-    return 1;
-  }
+class _TyreDialogDateField extends StatelessWidget {
+  final String label;
+  final DateTime? value;
+  final String Function(DateTime?) formatDate;
+  final DateTime firstDate;
+  final DateTime lastDate;
+  final void Function(DateTime)? onChanged;
 
-  // Utility method to calculate cross-axis count
-  int _calculateCrossAxisCount(double width) {
-    if (width > 1200) return 3;
-    if (width > 800) return 2;
-    return 1;
-  }
+  const _TyreDialogDateField({
+    required this.label,
+    required this.value,
+    required this.formatDate,
+    required this.firstDate,
+    required this.lastDate,
+    required this.onChanged,
+  });
 
-  Widget _buildActionButtons(
-      {required void Function()? onPressedSave,
-      required void Function()? onPressedCancel}) {
+  bool get _readOnly => onChanged == null;
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(
-          child: SizedBox(
-            height: 48,
-            child: ElevatedButton(
-              onPressed: onPressedSave,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: const Text(
-                'Save Changes',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+        SizedBox(
+          width: 100,
+          child: Text(
+            label,
+            style: AppTextStyles.label,
           ),
         ),
-        const SizedBox(width: 16),
         Expanded(
-          child: SizedBox(
-            height: 48,
-            child: OutlinedButton(
-              onPressed: onPressedCancel,
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[800]!,
-                ),
+          child: InkWell(
+            onTap: _readOnly
+                ? null
+                : () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: value ?? DateTime.now(),
+                      firstDate: firstDate,
+                      lastDate: lastDate,
+                      builder: (context, child) {
+                        return Theme(
+                          data: Theme.of(context).copyWith(
+                            colorScheme: ColorScheme.light(
+                              primary: AppColors.accent,
+                              onPrimary: Colors.white,
+                              surface: AppColors.cardBg,
+                              onSurface: AppColors.textPrimary,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (picked != null) {
+                      onChanged!(picked);
+                    }
+                  },
+            borderRadius: AppRadius.borderMd,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.md,
+              ),
+              decoration: BoxDecoration(
+                color: _readOnly
+                    ? AppColors.surface.withOpacity(0.5)
+                    : AppColors.surface,
+                borderRadius: AppRadius.borderMd,
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    value != null
+                        ? formatDate(value)
+                        : (_readOnly ? '—' : 'Select Date'),
+                    style: AppTextStyles.body.copyWith(
+                      color: value != null
+                          ? (_readOnly
+                              ? AppColors.textMuted
+                              : AppColors.textPrimary)
+                          : AppColors.textMuted,
+                    ),
+                  ),
+                  Icon(
+                    _readOnly
+                        ? Icons.lock_outline
+                        : Icons.calendar_today_outlined,
+                    size: 16,
+                    color: AppColors.textMuted,
+                  ),
+                ],
               ),
             ),
           ),
@@ -1449,64 +3154,181 @@ class AddEditVehiclePage extends StatelessWidget {
       ],
     );
   }
+}
 
-  // Utility Widgets for Different Field Types
-  Widget _buildReadOnlyField(String label, dynamic value) {
-    return ListTile(
-      title: Text(label, style: const TextStyle(fontSize: 12)),
-      subtitle: Text(value.toString(),
-          style: const TextStyle(fontWeight: FontWeight.bold)),
-    );
-  }
+// ============================================================
+// DIALOG WIDGETS
+// ============================================================
 
-  Widget _buildDropdownField<T>({
-    required String label,
-    required T? value,
-    required List<T> options,
-    required void Function(T?)? onChanged,
-    String? Function(T?)? validator,
-    String Function(T)? displayTextBuilder, // Optional custom display text
-  }) {
-    return DropdownButtonHideUnderline(
-      child: DropdownButtonFormField<T>(
-        decoration: InputDecoration(
-          labelText: label,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+class _DialogTextField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final String? hint;
+  final TextInputType keyboardType;
+
+  const _DialogTextField({
+    required this.label,
+    required this.controller,
+    this.hint,
+    this.keyboardType = TextInputType.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppTextStyles.label),
+        const SizedBox(height: AppSpacing.sm),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          style: AppTextStyles.body,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textMuted,
+            ),
+            filled: true,
+            fillColor: AppColors.surface,
+            border: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+          ),
         ),
-        value: value,
-        items: options.map((value) {
-          return DropdownMenuItem<T>(
-            value: value,
-            child: Text(displayTextBuilder != null
-                ? displayTextBuilder(value)
-                : value.toString()),
-          );
-        }).toList(),
-        onChanged: onChanged,
-        validator: validator,
-        isDense: true,
-        isExpanded: true,
-      ),
+      ],
     );
   }
+}
 
-  Widget _buildTextFormField(
-      {required String label,
-      required TextEditingController editingCon,
-      void Function(String)? onChanged,
-      void Function()? onTap,
-      String? Function(String?)? validator,
-      bool readOnly = false}) {
-    return TextFormField(
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      controller: editingCon,
-      onChanged: onChanged,
-      validator: validator,
-      onTap: onTap,
-      readOnly: readOnly,
+class _DialogDateField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final VoidCallback onTap;
+
+  const _DialogDateField({
+    required this.label,
+    required this.controller,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppTextStyles.label),
+        const SizedBox(height: AppSpacing.sm),
+        TextField(
+          controller: controller,
+          readOnly: true,
+          onTap: onTap,
+          style: AppTextStyles.body,
+          decoration: InputDecoration(
+            suffixIcon: Icon(
+              Icons.calendar_today_outlined,
+              size: 18,
+              color: AppColors.textMuted,
+            ),
+            filled: true,
+            fillColor: AppColors.surface,
+            border: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DialogDropdown<T> extends StatelessWidget {
+  final String label;
+  final T? value;
+  final List<T> items;
+  final void Function(T?)? onChanged;
+  final String Function(T)? displayBuilder;
+  final String? Function(T?)? validator;
+
+  const _DialogDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    this.onChanged,
+    this.displayBuilder,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppTextStyles.label),
+        const SizedBox(height: AppSpacing.sm),
+        DropdownButtonFormField<T>(
+          value: value,
+          items: items.map((item) {
+            return DropdownMenuItem<T>(
+              value: item,
+              child: Text(
+                displayBuilder?.call(item) ?? item.toString(),
+                style: AppTextStyles.body,
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+          validator: validator,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: AppColors.surface,
+            border: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: AppRadius.borderMd,
+              borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+          ),
+          dropdownColor: AppColors.cardBg,
+          isExpanded: true,
+        ),
+      ],
     );
   }
 }

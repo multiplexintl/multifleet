@@ -1,6 +1,5 @@
 import 'dart:math';
 
-import '../models/tyre.dart';
 import '../models/vehicle.dart';
 
 class FakeVehicleData {
@@ -10,7 +9,7 @@ class FakeVehicleData {
       final randomDays = random.nextInt(71) + 20;
       return Vehicle(
         company: 'EPIC${(index % 3) + 1}',
-        vehicleNo: 'DUB-${1000 + index}',
+        vehicleNo: 'DXB-12345',
         brand: index % 2 == 0 ? 'Toyota' : 'Nissan',
         type: index % 2 == 0 ? 'SUV' : 'Truck',
         model: 'Model-${String.fromCharCode(65 + index % 26)}',
@@ -54,7 +53,7 @@ class FakeVehicleData {
   static bool isVehicleAssigned(String plateNumber) {
     // In a real app, this would check a database for assignments
     // For demo purposes, let's say ABC123 is already assigned
-    return plateNumber.toLowerCase() == '11908-AA';
+    return plateNumber.toLowerCase() == plateNumber.toLowerCase();
   }
 
   static PaginatedResult<Map<String, dynamic>> getVehicleAssignments(

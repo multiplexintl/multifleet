@@ -1,5 +1,6 @@
 // Placeholder widgets for header pages
 import 'package:flutter/material.dart';
+import 'package:multifleet/theme/app_theme.dart';
 
 class HomePageContent extends StatelessWidget {
   const HomePageContent({super.key});
@@ -20,7 +21,7 @@ class HomePageContent extends StatelessWidget {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.blue[800],
+              color: AppColors.accent,
             ),
           ),
           SizedBox(height: 16),
@@ -28,7 +29,7 @@ class HomePageContent extends StatelessWidget {
             'Your comprehensive fleet management solution',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.grey[700],
+              color: AppColors.textPrimary,
             ),
           ),
           SizedBox(height: 24),
@@ -92,7 +93,7 @@ class HomePageContent extends StatelessWidget {
             Icon(
               icon,
               size: 48,
-              color: Colors.blue[800],
+              color: AppColors.accent,
             ),
             SizedBox(height: 16),
             Text(
@@ -100,7 +101,7 @@ class HomePageContent extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue[800],
+                color: AppColors.accent,
               ),
               textAlign: TextAlign.center,
             ),
@@ -109,7 +110,7 @@ class HomePageContent extends StatelessWidget {
               description,
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[700],
+                color: AppColors.textPrimary,
               ),
               textAlign: TextAlign.center,
             ),

@@ -1,13 +1,17 @@
 class Company {
   String? id;
   String? name;
+  String? shortName;
+  String? currency;
 
-  Company({this.id, this.name});
+  Company({this.id, this.name, this.shortName, this.currency});
 
   factory Company.fromJson(Map<String, dynamic> json) {
     return Company(
-      id: json['id'] as String?,
-      name: json['name'] as String?,
+      id: json['Company'] as String?,
+      name: json['CompanyName'] as String?,
+      shortName: json['ShortName'] as String?,
+      currency: json['currency'] as String?,
     );
   }
 
@@ -15,6 +19,8 @@ class Company {
     return {
       'id': id,
       'name': name,
+      'shortName': shortName,
+      'currency': currency,
     };
   }
 
@@ -22,11 +28,14 @@ class Company {
     return Company(
       id: id ?? this.id,
       name: name ?? this.name,
+      shortName: shortName,
+      currency: currency,
     );
   }
 
   @override
-  String toString() => 'Company(id: $id, name: $name)';
+  String toString() =>
+      'Company(id: $id, name: $name, shortName: $shortName, currency: $currency)';
 
   @override
   bool operator ==(Object other) =>
@@ -34,7 +43,9 @@ class Company {
       other is Company &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          name == other.name;
+          name == other.name &&
+          shortName == other.shortName &&
+          currency == other.currency;
 
   @override
   int get hashCode => id.hashCode ^ name.hashCode;

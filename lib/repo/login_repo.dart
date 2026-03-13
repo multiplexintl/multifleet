@@ -35,6 +35,8 @@ class LoginRepo {
             return Right(user);
           }
         } else {
+          var responseBody = jsonDecode(response.body);
+          log(responseBody.toString());
           return Left(response.body);
         }
       },

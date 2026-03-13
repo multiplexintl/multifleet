@@ -4,7 +4,9 @@ import 'dart:io';
 
 import 'package:dartz/dartz.dart';
 import 'package:global_configuration/global_configuration.dart';
-import 'package:multifleet/models/doc_type.dart';
+import 'package:multifleet/models/api_response.dart';
+import 'package:multifleet/models/doc_master.dart';
+import 'package:multifleet/models/fuel_station/fuel_station.dart';
 import 'package:multifleet/models/tyre.dart';
 import 'package:multifleet/models/vehicle.dart';
 import 'package:multifleet/models/vehicle_docs.dart';
@@ -77,11 +79,11 @@ class VehiclesRepo {
   }
 
   Future<Either<String, List<Tyre>>> getAllVehicleTyres(
-      {required String vehicleNumber, String? query}) async {
+      {required String company, String? vehicleNumber}) async {
     return await RetryHelper.retry<Either<String, List<Tyre>>>(
       apiCall: () async {
         final Uri url = Uri.parse(
-            '${_url}Master/GetTyreMaster?VehicleNo=$vehicleNumber&Brand=');
+            '${_url}Master/GetVehicleTyre?Company=$company&VehicleNo=$vehicleNumber');
         final client = http.Client();
         log(url.toString());
         final response = await client.get(url);
@@ -109,9 +111,9 @@ class VehiclesRepo {
     );
   }
 
-  Future<Either<String, List<DocumentType>>> getAllVehicleDocumentMaster(
+  Future<Either<String, List<DocumentMaster>>> getAllVehicleDocumentMaster(
       {required String company, String? query}) async {
-    return await RetryHelper.retry<Either<String, List<DocumentType>>>(
+    return await RetryHelper.retry<Either<String, List<DocumentMaster>>>(
       apiCall: () async {
         final Uri url = Uri.parse(
             '${_url}Master/GetDocumentMaster?Company=$company&query=${query ?? ''}');
@@ -124,10 +126,10 @@ class VehiclesRepo {
           List<dynamic> responseBody = jsonDecode(response.body);
 
           if (responseBody.isEmpty) {
-            return const Left("DocumentType Not Found!!.");
+            return const Left("DocumentMaster Not Found!!.");
           } else {
             var vehicle = responseBody
-                .map((element) => DocumentType.fromJson(element))
+                .map((element) => DocumentMaster.fromJson(element))
                 .toList();
             return Right(vehicle);
           }
@@ -143,15 +145,17 @@ class VehiclesRepo {
     );
   }
 
-  Future<bool> createUpdateVehicle(Vehicle vehicle) async {
-    return await RetryHelper.retry<bool>(
+  Future<Either<String?, bool>> createUpdateVehicle(Vehicle vehicle) async {
+    return await RetryHelper.retry<Either<String?, bool>>(
       maxRetries: 3,
-      defaultValue: false,
-      shouldRetry: (response) =>
-          response == false, // Fixed this line from "response = false"
+      defaultValue: const Left("Retry failed"),
+      shouldRetry: (result) =>
+          // result.isLeft() &&
+          result.fold((l) => l == "Retry failed", (_) => false),
       apiCall: () async {
         final Uri url = Uri.parse('${_url}Vehicle/CreateVehicle');
         final client = http.Client();
+        ApiResponse apiResponse = ApiResponse();
         var body = json.encode(vehicle.toJson());
         log(body);
 
@@ -168,29 +172,21 @@ class VehiclesRepo {
 
           if (response.statusCode == 200) {
             // Parse the response body
-            final responseData = json.decode(response.body);
+            List<dynamic> responseData = json.decode(response.body);
 
-            // Check if response is a list with at least one element
-            if (responseData is List && responseData.isNotEmpty) {
-              // Get the first element and check for VehicleNoInserted field
-              final firstItem = responseData[0];
-
-              if (firstItem is Map<String, dynamic> &&
-                  firstItem.containsKey('VehicleNoInserted')) {
-                // Get the inserted vehicle number
-                final insertedVehicleNo = firstItem['VehicleNoInserted'];
-
-                // Compare with the vehicle number in the request
-                final requestVehicleNo = vehicle.vehicleNo;
-
-                // Return true only if they match
-                return insertedVehicleNo == requestVehicleNo;
-              }
+            if (responseData.isNotEmpty) {
+              apiResponse = responseData
+                  .map((element) => ApiResponse.fromJson(element))
+                  .toList()
+                  .first;
             }
 
-            // If we reached here, the response format wasn't as expected
-            log('Unexpected response format: ${response.body}');
-            return false;
+            if (apiResponse.status == 1 &&
+                apiResponse.id == vehicle.vehicleNo) {
+              return Right(true);
+            } else {
+              return Left(apiResponse.message);
+            }
           } else {
             // Log the error response for debugging
             log('Error response: ${response.statusCode} - ${response.body}');
@@ -202,6 +198,40 @@ class VehiclesRepo {
               .close(); // Make sure to close the client to prevent resource leaks
         }
       },
+    );
+  }
+
+  Future<Either<String, List<FuelStation>>> getFuelStation(
+      {required String company, String? query}) async {
+    return await RetryHelper.retry<Either<String, List<FuelStation>>>(
+      apiCall: () async {
+        final Uri url = Uri.parse(
+            '${_url}Master/GetFuelStationMaster?Company=$company&query=${query ?? ''}');
+        final client = http.Client();
+        log(url.toString());
+        final response = await client.get(url);
+        log("Response Code: ${response.statusCode}");
+
+        if (response.statusCode == 200) {
+          List<dynamic> responseBody = jsonDecode(response.body);
+
+          if (responseBody.isEmpty) {
+            return const Left("FuelStation Not Found!!.");
+          } else {
+            var stations = responseBody
+                .map((element) => FuelStation.fromJson(element))
+                .toList();
+            return Right(stations);
+          }
+        } else {
+          return Left(response.body);
+        }
+      },
+      defaultValue: const Left("Retry failed"),
+      maxRetries: 3,
+      shouldRetry: (result) =>
+          // result.isLeft() &&
+          result.fold((l) => l == "Retry failed", (_) => false),
     );
   }
 }
