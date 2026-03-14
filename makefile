@@ -27,4 +27,14 @@ deploy-web:
 	cd ../..
 	@echo "🟢 Finished Deploy"
 
-.PHONY: deploy-web
+deploy-test:
+	@echo "Building for test.multifleet.ae..."
+	flutter clean
+	flutter pub get
+	flutter build web --base-href / --release
+	@echo "Uploading via FTP..."
+	lftp -e "mirror -R --delete build/web/ /test.multifleet.ae/; quit" \
+	     -u $(FTP_USER),$(FTP_PASS) ftp://185.243.77.85
+	@echo "🟢 Deployed to test.multifleet.ae"
+
+.PHONY: deploy-web deploy-test

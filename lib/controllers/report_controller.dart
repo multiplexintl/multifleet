@@ -8,6 +8,7 @@ import '../models/reports/report_data.dart';
 import '../models/reports/report_types.dart';
 
 import '../repo/report_repo.dart';
+import '../services/report_export_service.dart';
 import '../services/report_service.dart';
 
 import 'package:multifleet/models/company.dart';
@@ -549,20 +550,24 @@ class ReportController extends GetxController
 
     isExporting.value = true;
     try {
-      // TODO: Implement actual export using excel/pdf packages
-      await Future.delayed(const Duration(seconds: 1)); // Simulated delay
-
+      final report = generatedReport.value!;
+      if (fmt == ExportFormat.excel) {
+        await ReportExportService.instance.exportExcel(report);
+      } else if (fmt == ExportFormat.pdf) {
+        await ReportExportService.instance.exportPdf(report);
+      }
       Get.snackbar(
-        'Success',
-        'Exported as ${fmt.label}',
+        'Exported',
+        '${report.title} saved as ${fmt.label}',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.green.withOpacity(0.9),
         colorText: Colors.white,
       );
     } catch (e) {
+      log('[ReportController] Export error: $e');
       Get.snackbar(
-        'Error',
-        'Export failed: $e',
+        'Export Failed',
+        e.toString(),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red.withOpacity(0.9),
         colorText: Colors.white,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:multifleet/repo/login_repo.dart';
 import 'package:multifleet/widgets/custom_snackbar.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../routes.dart';
 import '../models/user.dart';
@@ -14,12 +15,13 @@ class LoginController extends GetxController {
   final pwdController = TextEditingController();
   var loadingCon = Get.find<LoadingController>();
   var isPwdVisible = false.obs;
+  final version = ''.obs;
 
-  // @override
-  // void onInit() {
-  //   // TODO: implement onInit
-  //   super.onInit();
-  // }
+  @override
+  void onInit() {
+    super.onInit();
+    PackageInfo.fromPlatform().then((info) => version.value = info.version);
+  }
 
   void togglePwdVisibilty() async {
     isPwdVisible.toggle();

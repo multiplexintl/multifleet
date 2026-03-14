@@ -141,13 +141,13 @@ class LoginScreen extends StatelessWidget {
                 const Spacer(),
 
                 // Footer
-                Text(
-                  '© 2026 MultiFleet • Version 1.0.0',
+                Obx(() => Text(
+                  '© 2026 MultiFleet • Version ${Get.find<LoginController>().version.value}',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.5),
                     fontSize: 13,
                   ),
-                ),
+                )),
               ],
             ),
           ),
@@ -293,7 +293,7 @@ class LoginScreen extends StatelessWidget {
 
               // Footer
               Text(
-                '© 2026 MultiFleet • Version 1.0.0',
+                '© 2026 MultiFleet • Version ${controller.version.value}',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.6),
                   fontSize: 12,
