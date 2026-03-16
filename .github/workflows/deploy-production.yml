@@ -1,8 +1,8 @@
-name: Deploy to test.multifleet.ae
+name: Deploy to multifleet.ae
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
 
 jobs:
   build-and-deploy:
@@ -21,8 +21,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Use test config
-        run: cp "assets/cfg/config test.json" assets/cfg/config.json
+      - name: Use production config
+        run: cp "assets/cfg/config live.json" assets/cfg/config.json
 
       - name: Build web
         run: flutter build web --base-href / --release
@@ -34,5 +34,5 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: build/web/
-          server-dir: /test.multifleet.ae/
+          server-dir: /multifleet.ae/
           dangerous-clean-slate: true
