@@ -25,14 +25,17 @@ class UserService extends GetxService {
     }
   }
 
-  void saveUser(User user) {
+  Future<void> saveUser(User user) async {
     _user.value = user;
-    _storage.write('user', user.toJson()); // Store User as JSON
+    await _storage.write('user', user.toJson());
+    await _storage
+        .save(); // Force flush to persistent storage (critical for web)
   }
 
-  void clearUser() {
+  Future<void> clearUser() async {
     _user.value = null;
-    _storage.remove('user');
+    await _storage.remove('user');
+    await _storage.save();
   }
 
   bool get isLoggedIn => user != null;
